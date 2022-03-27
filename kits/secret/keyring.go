@@ -25,6 +25,11 @@ func KeyringDriver(ctx context.Context) *Keyring {
 	}
 }
 
+// IsAvailable returns true if the keyring API is available.
+func (k *Keyring) IsAvailable() bool {
+	return keyring.Set(k.id, "__secret_available_000", "") == nil
+}
+
 // Set sets the key.
 func (k *Keyring) Set(key string, value []byte) error {
 	return keyring.Set(k.id, key, string(value))

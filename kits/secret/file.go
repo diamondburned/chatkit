@@ -211,6 +211,18 @@ func (s *EncryptedFile) getPass() ([]byte, error) {
 	return userHash, nil
 }
 
+// IsAvailable returns true if the encryption can initialize itself.
+func (s *EncryptedFile) IsAvailable() bool {
+	return s.Initialize() == nil
+}
+
+// Initialize initializes the encryption. Once it returns a nil error, all
+// future calls on that instance will always do nothing and return nil.
+func (s *EncryptedFile) Initialize() error {
+	_, err := s.getAEAD()
+	return err
+}
+
 func (s *EncryptedFile) Set(key string, value []byte) error {
 	aead, err := s.getAEAD()
 	if err != nil {
