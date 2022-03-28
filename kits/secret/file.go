@@ -78,15 +78,15 @@ func EncryptedFileDriver(ctx context.Context, passphrase string) *EncryptedFile 
 	return &EncryptedFile{path: encryptedFilePath(ctx), pass: passphrase, enc: true}
 }
 
-// PathIsEncrypted returns true if the given path is encrypted. It is the
-// caller's responsibility to use SaltedFileDriver or EncryptedFileDriver on the
-// same path.
+// IsEncrypted returns true if the given context contains an existing encryption
+// file. It is the caller's responsibility to use SaltedFileDriver or
+// EncryptedFileDriver on the same path.
 //
 // In some cases, false will be returned if the status of encryption cannot be
 // determined. In this case, when EncryptedFileDriver is used, storing will be
 // errored out.
-func PathIsEncrypted(path string) bool {
-	hashPath := filepath.Join(path, hashFile)
+func IsEncrypted(ctx context.Context) bool {
+	hashPath := filepath.Join(encryptedFilePath(ctx), hashFile)
 
 	f, err := os.Stat(hashPath)
 	if err != nil || f.IsDir() {
