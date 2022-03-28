@@ -26,9 +26,18 @@ var passwordCSS = cssutil.Applier("secretdialog-password", `
 	}
 `)
 
+// PromptMode chooses the mode to prompt the password dialog to the user. It's
+// either for decrypting for encrypting. This type only determines the labels.
+type PromptMode uint8
+
+const (
+	PromptEncrypt PromptMode = iota
+	PromptDecrypt
+)
+
 // PromptPassword prompts the password to the user. done is called when the
 // dialog is either closed or confirmed by the user.
-func PromptPassword(ctx context.Context, done func(ok bool, enc *secret.EncryptedFile)) {
+func PromptPassword(ctx context.Context, mode PromptMode, done func(ok bool, enc *secret.EncryptedFile)) {
 	passEntry := gtk.NewEntry()
 	passEntry.SetInputPurpose(gtk.InputPurposePassword)
 	passEntry.SetVisibility(false)
@@ -41,14 +50,19 @@ func PromptPassword(ctx context.Context, done func(ok bool, enc *secret.Encrypte
 	passBox.Append(passLabel)
 	passBox.Append(passEntry)
 
+	action := "Encrypt"
+	if mode == PromptDecrypt {
+		action = "Decrypt"
+	}
+
 	// Ask for encryption.
 	passPrompt := gtk.NewDialog()
-	passPrompt.SetTitle("Encrypt File")
+	passPrompt.SetTitle(action + " File")
 	passPrompt.SetDefaultSize(250, 80)
 	passPrompt.SetTransientFor(app.GTKWindowFromContext(ctx))
 	passPrompt.SetModal(true)
 	passPrompt.AddButton("Cancel", int(gtk.ResponseCancel))
-	passPrompt.AddButton("Encrypt", int(gtk.ResponseAccept))
+	passPrompt.AddButton(action, int(gtk.ResponseAccept))
 	passPrompt.SetDefaultResponse(int(gtk.ResponseAccept))
 
 	passInner := passPrompt.ContentArea()
