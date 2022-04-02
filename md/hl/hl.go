@@ -254,7 +254,7 @@ func newFormatter(
 	if style := Style.Value(); style != "" {
 		tokenTags = convertStyle(loadStyle(ctx, style))
 	} else {
-		isDark := textutil.IsDarkTheme(app.GTKWindowFromContext(ctx))
+		isDark := textutil.IsDarkTheme()
 		tokenTags = defaultTagMap(isDark)
 	}
 

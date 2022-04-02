@@ -4,8 +4,6 @@ package md
 import (
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 	"github.com/diamondburned/gotk4/pkg/pango"
-	"github.com/diamondburned/gotkit/gtkutil"
-	"github.com/diamondburned/gotkit/gtkutil/cssutil"
 	"github.com/diamondburned/gotkit/gtkutil/textutil"
 
 	"github.com/yuin/goldmark"
@@ -35,6 +33,7 @@ var Parser = parser.NewParser(
 	),
 )
 
+// Renderer is the default Markdown renderer.
 var Renderer = html.NewRenderer(
 	html.WithHardWraps(),
 	html.WithUnsafe(),
@@ -60,76 +59,6 @@ const EmojiScale = 2.5
 var EmojiAttrs = textutil.Attrs(
 	pango.NewAttrScale(EmojiScale),
 )
-
-// TextTags contains the tag table mapping most Matrix HTML tags to GTK
-// TextTags.
-var TextTags = textutil.TextTagsMap{
-	// https://www.w3schools.com/cssref/css_default_values.asp
-	"h1":     htag(1.75),
-	"h2":     htag(1.50),
-	"h3":     htag(1.17),
-	"h4":     htag(1.00),
-	"h5":     htag(0.83),
-	"h6":     htag(0.67),
-	"em":     {"style": pango.StyleItalic},
-	"i":      {"style": pango.StyleItalic},
-	"strong": {"weight": pango.WeightBold},
-	"b":      {"weight": pango.WeightBold},
-	"u":      {"underline": pango.UnderlineSingle},
-	"strike": {"strikethrough": true},
-	"del":    {"strikethrough": true},
-	"sup":    {"rise": +6000, "scale": 0.7},
-	"sub":    {"rise": -2000, "scale": 0.7},
-	"code": {
-		"family":         "Monospace",
-		"insert-hyphens": false,
-	},
-	"caption": {
-		"weight": pango.WeightLight,
-		"style":  pango.StyleItalic,
-		"scale":  0.8,
-	},
-	"li": {
-		"left-margin": 24, // px
-	},
-	"blockquote": {
-		"foreground":  "#789922",
-		"left-margin": 12, // px
-	},
-
-	// Not HTML tag.
-	"htmltag": {
-		"family":     "Monospace",
-		"foreground": "#808080",
-	},
-	// Meta tags.
-	"_invisible": {"editable": false, "invisible": true},
-	"_immutable": {"editable": false},
-	"_emoji":     {"scale": EmojiScale},
-	"_image":     {"rise": -2 * pango.SCALE},
-	"_nohyphens": {"insert-hyphens": false},
-}
-
-func htag(scale float64) textutil.TextTag {
-	return textutil.TextTag{
-		"scale":  scale,
-		"weight": pango.WeightBold,
-	}
-}
-
-var separatorCSS = cssutil.Applier("md-separator", `
-	.md-separator {
-		background-color: @theme_fg_color;
-	}
-`)
-
-// NewSeparator creates a new 100px Markdown <hr> widget.
-func NewSeparator() *gtk.Separator {
-	s := gtk.NewSeparator(gtk.OrientationHorizontal)
-	s.SetSizeRequest(100, -1)
-	separatorCSS(s)
-	return s
-}
 
 // AddWidgetAt adds a widget into the text view at the current iterator
 // position.
@@ -157,13 +86,13 @@ func ParseAndWalk(src []byte, w ast.Walker) error {
 // text iterator belongs to. Calling the returned callback will end the
 // immutable region. Calling it is not required, but the given iterator must
 // still be valid when it's called.
-func BeginImmutable(pos *gtk.TextIter) func() {
+func BeginImmutable(pos *gtk.TextIter) (end func()) {
 	ix := pos.Offset()
 
 	return func() {
 		buf := pos.Buffer()
 		tbl := buf.TagTable()
-		tag := TextTags.FromTable(tbl, "_immutable")
+		tag := Tags.FromTable(tbl, "_immutable")
 		buf.ApplyTag(tag, buf.IterAtOffset(ix), pos)
 	}
 }
@@ -177,7 +106,7 @@ func InsertInvisible(pos *gtk.TextIter, txt string) {
 
 func insertInvisible(buf *gtk.TextBuffer, pos *gtk.TextIter, txt string) {
 	tbl := buf.TagTable()
-	tag := TextTags.FromTable(tbl, "_invisible")
+	tag := Tags.FromTable(tbl, "_invisible")
 
 	start := pos.Offset()
 	buf.Insert(pos, txt)
@@ -186,64 +115,9 @@ func insertInvisible(buf *gtk.TextBuffer, pos *gtk.TextIter, txt string) {
 	buf.ApplyTag(tag, startIter, pos)
 }
 
-// inlineImageHeightOffset is kept in sync with the -0.35em subtraction above,
-// because GTK behaves weirdly with how the height is done. It only matters for
-// small inline images, though.
-const inlineImageHeightOffset = -4
-
-// InlineImage is an inline image.
-type InlineImage struct {
-	*gtk.Image
-}
-
-// SetSizeRequest sets the minimum size of the inline image.
-func (i *InlineImage) SetSizeRequest(w, h int) {
-	h += inlineImageHeightOffset
-	i.Image.SetSizeRequest(w, h)
-}
-
-var inlineImageCSS = cssutil.Applier("md-inlineimage", `
-	.md-inlineimage {
-		margin-bottom: -0.45em;
-	}
-`)
-
-// InsertImageWidget asynchronously inserts a new image widget. It does so in a
-// way that the text position of the text buffer is not scrambled. Images
-// created using this function will have the ".md-inlineimage" class.
-func InsertImageWidget(view *gtk.TextView, anchor *gtk.TextChildAnchor) *InlineImage {
-	image := gtk.NewImageFromIconName("image-x-generic-symbolic")
-	inlineImageCSS(image)
-
-	fixTextHeight(view, image)
-
-	view.AddChildAtAnchor(image, anchor)
-	view.AddCSSClass("md-hasimage")
-
-	return &InlineImage{image}
-}
-
-func fixTextHeight(view *gtk.TextView, image *gtk.Image) {
-	for _, class := range view.CSSClasses() {
-		if class == "md-hasimage" {
-			return
-		}
-	}
-
-	gtkutil.OnFirstMap(image, func() {
-		// Workaround to account for GTK's weird height allocating when a widget
-		// is added. We're removing most of the excess empty padding with this.
-		h := image.AllocatedHeight() * 95 / 100
-		if h < 1 {
-			return
-		}
-
-		cssutil.Applyf(view, `* { margin-bottom: -%dpx; }`, h)
-	})
-}
-
-// https://stackoverflow.com/a/36258684/5041327
-var emojiRanges = [][2]rune{
+// EmojiRanges describes the Unicode character ranges that indicate an emoji.
+// For reference, see https://stackoverflow.com/a/36258684/5041327.
+var EmojiRanges = [][2]rune{
 	{0x1F600, 0x1F64F}, // Emoticons
 	{0x1F300, 0x1F5FF}, // Misc Symbols and Pictographs
 	{0x1F680, 0x1F6FF}, // Transport and Map
@@ -254,8 +128,6 @@ var emojiRanges = [][2]rune{
 	{0x1F1E6, 0x1F1FF}, // Flags
 }
 
-const minEmojiUnicode = 0x2600 // see above
-
 // IsUnicodeEmoji returns true if the given string only contains a Unicode
 // emoji.
 func IsUnicodeEmoji(v string) bool {
@@ -263,8 +135,8 @@ runeLoop:
 	for _, r := range v {
 		// Fast path: only run the loop if this character is in any of the
 		// ranges by checking the minimum rune.
-		if r >= minEmojiUnicode {
-			for _, crange := range emojiRanges {
+		if r >= 0xFF {
+			for _, crange := range EmojiRanges {
 				if crange[0] <= r && r <= crange[1] {
 					continue runeLoop
 				}

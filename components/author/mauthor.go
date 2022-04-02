@@ -122,7 +122,7 @@ func Markup(name string, mods ...MarkupMod) string {
 		b.WriteByte(' ')
 		b.WriteString(fmt.Sprintf(
 			`<span fgalpha="75%%" size="small">%s</span>`,
-			html.EscapeString(string(opts.suffix)),
+			string(opts.suffix),
 		))
 	}
 
@@ -168,6 +168,9 @@ func Text(iter *gtk.TextIter, name string, mods ...MarkupMod) {
 		}
 
 		buf.ApplyTag(tag, startIter, iter)
+	}
 
+	if opts.suffix != "" {
+		buf.InsertMarkup(iter, " "+opts.suffix)
 	}
 }

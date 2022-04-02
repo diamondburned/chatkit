@@ -58,7 +58,7 @@ var chipCSS = cssutil.Applier("mauthor-chip", `
 	}
 `)
 
-const ChipAvatarSize = 24
+const ChipAvatarSize = 20 // smaller than usual
 
 // NewChip creates a new Chip widget.
 func NewChip(ctx context.Context, avatarProvider imgutil.Provider) *Chip {

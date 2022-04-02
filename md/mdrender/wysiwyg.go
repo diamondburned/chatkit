@@ -1,11 +1,13 @@
-package md
+package mdrender
 
 import (
 	"bytes"
 	"context"
+	"log"
 	"strconv"
 	"strings"
 
+	"github.com/diamondburned/chatkit/md"
 	"github.com/diamondburned/chatkit/md/hl"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 	"github.com/diamondburned/gotkit/gtkutil/textutil"
@@ -14,12 +16,22 @@ import (
 
 const wysiwygPrefix = "_wysiwyg_"
 
-var wysiwygTags = make(textutil.TextTagsMap, len(TextTags))
-
-func init() {
-	for name, attrs := range TextTags {
-		wysiwygTags[wysiwygPrefix+name] = attrs
+func wysiwygTag(tagTable *gtk.TextTagTable, name string) *gtk.TextTag {
+	tag := tagTable.Lookup(wysiwygPrefix + name)
+	if tag != nil {
+		return tag
 	}
+
+	tt, ok := md.Tags[name]
+	if !ok {
+		log.Panicln("unknown tag name", name)
+		return nil
+	}
+
+	tag = tt.Tag(wysiwygPrefix + name)
+	tagTable.Add(tag)
+
+	return tag
 }
 
 type WYSIWYGOpts struct {
@@ -80,7 +92,7 @@ func (w *WYSIWYG) Render() {
 	}
 
 	// Error is not important.
-	ParseAndWalk(w.Source, w.walker)
+	md.ParseAndWalk(w.Source, w.walker)
 }
 
 func (w *WYSIWYG) walker(n ast.Node, enter bool) (ast.WalkStatus, error) {
@@ -162,7 +174,7 @@ func (w *WYSIWYG) enter(n ast.Node) ast.WalkStatus {
 }
 
 func (w *WYSIWYG) tag(tagName string) *gtk.TextTag {
-	return wysiwygTags.FromTable(w.Tags, wysiwygPrefix+tagName)
+	return wysiwygTag(w.Tags, tagName)
 }
 
 func (w *WYSIWYG) tags(tagNames []string) []*gtk.TextTag {
@@ -177,7 +189,7 @@ func (w *WYSIWYG) tags(tagNames []string) []*gtk.TextTag {
 // texts that are invisible.
 func (w *WYSIWYG) BoundIsInvisible() bool {
 	if w.invisTag == nil {
-		w.invisTag = TextTags.FromTable(w.Tags, "_invisible")
+		w.invisTag = md.Tags.FromTable(w.Tags, "_invisible")
 	}
 
 	return w.Head.HasTag(w.invisTag) && w.Tail.HasTag(w.invisTag)
@@ -186,8 +198,8 @@ func (w *WYSIWYG) BoundIsInvisible() bool {
 // MarkBounds is like MarkText, except it takes custom bounds instead of ones
 // from an ast.Node.
 func (w *WYSIWYG) MarkBounds(i, j int, names ...string) {
-	w.Head.SetOffset(i)
-	w.Tail.SetOffset(j)
+	w.SetIter(w.Head, i)
+	w.SetIter(w.Tail, j)
 
 	if w.BoundIsInvisible() {
 		return
@@ -217,7 +229,7 @@ func (w *WYSIWYG) MarkTextFunc(n ast.Node, names []string, f func(h, t *gtk.Text
 
 // MarkTextTagsFunc is the tag variant of markTextFunc.
 func (w *WYSIWYG) MarkTextTagsFunc(n ast.Node, tags []*gtk.TextTag, f func(h, t *gtk.TextIter)) {
-	WalkChildren(n, func(n ast.Node, enter bool) (ast.WalkStatus, error) {
+	md.WalkChildren(n, func(n ast.Node, enter bool) (ast.WalkStatus, error) {
 		text, ok := n.(*ast.Text)
 		if !ok {
 			return ast.WalkContinue, nil
@@ -245,7 +257,13 @@ func (w *WYSIWYG) MarkTextTagsFunc(n ast.Node, tags []*gtk.TextTag, f func(h, t 
 //
 // SetIter reimplements text/url.go's autolink.
 func (w *WYSIWYG) SetIter(iter *gtk.TextIter, byteOffset int) {
-	part := w.Source[:byteOffset]
+	SetIter(iter, w.Source, byteOffset)
+}
+
+// SetIter sets the given iterator to the given byte offset. It is the most
+// correct way to convert an ast.Node's position to the iterator's.
+func SetIter(iter *gtk.TextIter, src []byte, byteOffset int) {
+	part := src[:byteOffset]
 	lines := bytes.Count(part, []byte("\n"))
 
 	lineAt := 0
