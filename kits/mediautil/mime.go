@@ -26,17 +26,37 @@ func MIME(f io.ReadSeeker) string {
 	return detectCT(buf[:n])
 }
 
-// FileMIME tries to get the MIME type of the given GIO file.
-func FileMIME(ctx context.Context, f *gio.FileInputStream) string {
-	// By the end of this function, ensure that any consumed read is undone.
-	defer f.Seek(ctx, 0, gioglib.SeekSet)
+// FileSize gets the size of the given gio.Filer.
+func FileSize(ctx context.Context, file gio.Filer) int64 {
+	info, err := file.QueryInfo(ctx, gio.FILE_ATTRIBUTE_STANDARD_SIZE, gio.FileQueryInfoNone)
+	if err != nil {
+		return 0
+	}
 
-	info, err := f.QueryInfo(ctx, gio.FILE_ATTRIBUTE_STANDARD_CONTENT_TYPE)
+	return info.Size()
+}
+
+// FileMIME tries to get the MIME type of the given GIO file.
+func FileMIME(ctx context.Context, file gio.Filer) string {
+	info, err := file.QueryInfo(ctx, gio.FILE_ATTRIBUTE_STANDARD_CONTENT_TYPE, gio.FileQueryInfoNone)
 	if err == nil {
 		if mime := gio.ContentTypeGetMIMEType(info.ContentType()); mime != "" {
 			return mime
 		}
 	}
+
+	r, err := file.Read(ctx)
+	if err != nil {
+		return ""
+	}
+
+	return FileReaderMIME(ctx, r)
+}
+
+// FileReaderMIME tries to get the MIME type of the given GIO file input stream.
+func FileReaderMIME(ctx context.Context, f *gio.FileInputStream) string {
+	// By the end of this function, ensure that any consumed read is undone.
+	defer f.Seek(ctx, 0, gioglib.SeekSet)
 
 	buf := make([]byte, 512)
 
