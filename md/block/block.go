@@ -101,3 +101,33 @@ func (s *ContainerState) Append(block WidgetBlock) {
 	s.current = s.list.PushBack(block)
 	s.Box.Append(block)
 }
+
+// ForEach iterates over the current-level containers until f returns true.
+func (s *ContainerState) ForEach(f func(WidgetBlock) bool) {
+	for n := s.list.Front(); n != nil; n = n.Next() {
+		if f(n.Value.(WidgetBlock)) {
+			break
+		}
+	}
+}
+
+// Walk is like ForEach, except all ContainerWidgetBlocks are traversed
+// recursively.
+func (s *ContainerState) Walk(f func(WidgetBlock) bool) {
+	s.walk(f)
+}
+
+func (s *ContainerState) walk(f func(WidgetBlock) bool) bool {
+	for n := s.list.Front(); n != nil; n = n.Next() {
+		if f(n.Value.(WidgetBlock)) {
+			return true
+		}
+
+		if c, ok := n.Value.(ContainerWidgetBlock); ok {
+			if c.State().walk(f) {
+				return true
+			}
+		}
+	}
+	return false
+}
