@@ -140,6 +140,10 @@ func (r *Renderer) RenderOnce(n ast.Node) ast.WalkStatus {
 		text := r.State.TextBlock()
 		text.ConnectLinkHandler()
 
+		if string(n.Title) != "" {
+			text.Insert(string(n.Title))
+		}
+
 		startIx := text.Iter.Offset()
 		status := r.RenderChildren(n)
 
@@ -147,10 +151,22 @@ func (r *Renderer) RenderOnce(n ast.Node) ast.WalkStatus {
 		start.SetOffset(startIx)
 		end := text.Iter
 
-		text.Buffer.ApplyTag(text.Tag("a"), start, end)
-		text.Buffer.ApplyTag(text.LinkTag(string(n.Destination)), start, end)
-
+		text.ApplyLink(string(n.Destination), start, end)
 		return status
+
+	case *ast.AutoLink:
+		text := r.State.TextBlock()
+		text.ConnectLinkHandler()
+
+		startIx := text.Iter.Offset()
+		text.Insert(string(n.URL(r.src)))
+
+		start := text.Iter.Copy()
+		start.SetOffset(startIx)
+		end := text.Iter
+
+		text.ApplyLink(string(n.URL(r.src)), start, end)
+		return ast.WalkContinue
 
 	case *ast.Paragraph:
 		text := r.State.TextBlock()

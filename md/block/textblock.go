@@ -122,9 +122,10 @@ func (b *TextBlock) InsertNewLines(n int) {
 	b.Buffer.Insert(b.Iter, strings.Repeat("\n", n))
 }
 
-// LinkTag creates a new TextTag for a hyperlink.
-func (b *TextBlock) LinkTag(url string) *gtk.TextTag {
-	return b.EmptyTag(md.URLTagName(url))
+// ApplyLink applies tags denoting a hyperlink.
+func (b *TextBlock) ApplyLink(url string, start, end *gtk.TextIter) {
+	b.Buffer.ApplyTag(b.EmptyTag(md.URLTagName(url)), start, end)
+	b.Buffer.ApplyTag(textutil.LinkTags().FromTable(b.state.TagTable(), "a"), start, end)
 }
 
 // EmptyTag gets an existing tag or creates a new empty one with the given name.

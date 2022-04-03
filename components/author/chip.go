@@ -40,14 +40,13 @@ type Chip struct {
 var chipCSS = cssutil.Applier("mauthor-chip", `
 	.mauthor-chip {
 		border-radius: 9999px 9999px;
-		margin-bottom: -0.4em;
+		margin-bottom: -0.45em;
 	}
 	.mauthor-chip-unpadded {
 		margin-bottom: 0;
 	}
 	.mauthor-chip-colored {
 		background-color: transparent; /* override custom CSS */
-		margin: -1px 0;
 	}
 	/*
      * Workaround for GTK padding an extra line at the bottom of the TextView if
