@@ -1,6 +1,7 @@
 package mdrender
 
 import (
+	"log"
 	"strconv"
 
 	"github.com/diamondburned/chatkit/md/block"
@@ -180,14 +181,10 @@ func (r *Renderer) RenderOnce(n ast.Node) ast.WalkStatus {
 		}
 
 		code := block.NewCodeBlock(r.State)
-		r.State.Append(code)
-
-		text := code.TextBlock()
-		text.TagNameBounded("code", func() {
-			text.Insert(string(extractSegments(lines, r.src)))
-		})
-
+		code.Text.TagNameBounded("code", func() { r.InsertSegments(code.Text, lines) })
 		code.Highlight(string(n.Language(r.src)))
+
+		r.State.Append(code)
 		return ast.WalkSkipChildren
 
 	case *ast.Blockquote:
@@ -205,29 +202,16 @@ func (r *Renderer) RenderOnce(n ast.Node) ast.WalkStatus {
 	return ast.WalkContinue
 }
 
-func extractSegments(lines *text.Segments, src []byte) string {
-	len := lines.Len()
-	if len == 0 {
-		return ""
+// InsertSegments inserts the given text segments into the buffer.
+func (r *Renderer) InsertSegments(text *block.TextBlock, segs *text.Segments) {
+	// Nothing about this "segments" API makes sense. It's literally useless
+	// abstraction over just slicing the god-damn byte slice (or string, for
+	// that matter).
+	for i := 0; i < segs.Len(); i++ {
+		// Also, At() returns a value but Value() has a pointer receiver. That's
+		// just really dumb.
+		seg := segs.At(i)
+		log.Println("    |", string(seg.Value(r.src)))
+		text.Insert(string(seg.Value(r.src)))
 	}
-	return string(src[lines.At(0).Start:lines.At(len-1).Stop])
-
-	// segs := segments.Sliced(0, segments.Len())
-
-	// var len int
-	// for _, seg := range segs {
-	// 	len += seg.Len() + 1
-	// }
-
-	// var buf strings.Builder
-	// buf.Grow(len)
-
-	// for _, seg := range segs {
-	// 	buf.WriteString(string(seg.Value(src)))
-	// 	buf.WriteByte('\n')
-	// }
-
-	// for i := 0; i < segments.Len(); i++ {
-	// 	segments.At(i)
-	// }
 }
