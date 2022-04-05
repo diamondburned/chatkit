@@ -14,16 +14,16 @@ import (
 // CodeBlock is a widget containing a block of code.
 type CodeBlock struct {
 	*gtk.Overlay
-	// Text is where code should be written to. CodeBlock does not implement
-	// TextWidgetBlock because it should only contain plain code.
-	Text *TextBlock
-
+	text   *TextBlock
 	state  *ContainerState
 	scroll *gtk.ScrolledWindow
 	lang   *gtk.Label
 }
 
-var _ WidgetBlock = (*CodeBlock)(nil)
+var (
+	_ WidgetBlock     = (*CodeBlock)(nil)
+	_ TextWidgetBlock = (*CodeBlock)(nil)
+)
 
 var CodeBlockCSS = cssutil.Applier("md-codeblock", `
 	.md-codeblock scrollbar {
@@ -49,6 +49,7 @@ var CodeBlockCSS = cssutil.Applier("md-codeblock", `
 		margin-right:  4px;
 		margin-bottom: 4px;
 	}
+	.md-codeblock-actions > *:not(label):hover,
 	.md-codeblock-expanded .md-codeblock-actions > * {
 		opacity: 1;
 	}
@@ -263,23 +264,28 @@ func NewCodeBlock(state *ContainerState) *CodeBlock {
 
 	return &CodeBlock{
 		Overlay: overlay,
-		Text:    text,
+		text:    text,
 		state:   state,
 		scroll:  sw,
 		lang:    language,
 	}
 }
 
+// TextBlock implements TextWidgetBlock.
+func (b *CodeBlock) TextBlock() *TextBlock {
+	return b.text
+}
+
 // Highlight highlights the whole codeblock by the given language. Calling this
 // method will always add the _nohyphens tag. If language is empty, then no
 // highlighting is actually done.
 func (b *CodeBlock) Highlight(language string) {
-	start := b.Text.Buffer.StartIter()
-	end := b.Text.Iter
+	start := b.text.Buffer.StartIter()
+	end := b.text.Iter
 
 	// Don't add any hyphens.
 	noHyphens := md.Tags.FromTable(b.state.TagTable(), "_nohyphens")
-	b.Text.Buffer.ApplyTag(noHyphens, start, end)
+	b.text.Buffer.ApplyTag(noHyphens, start, end)
 
 	if language != "" {
 		hl.Highlight(b.state.Context(), start, end, language)

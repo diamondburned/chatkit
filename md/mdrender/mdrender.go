@@ -181,10 +181,13 @@ func (r *Renderer) RenderOnce(n ast.Node) ast.WalkStatus {
 		}
 
 		code := block.NewCodeBlock(r.State)
-		code.Text.TagNameBounded("code", func() { r.InsertSegments(code.Text, lines) })
+		code.TextBlock().TagNameBounded("code", func() {
+			r.InsertSegments(code.TextBlock(), lines)
+		})
 		code.Highlight(string(n.Language(r.src)))
 
 		r.State.Append(code)
+		r.State.FinalizeBlock() // no more code from here on
 		return ast.WalkSkipChildren
 
 	case *ast.Blockquote:
