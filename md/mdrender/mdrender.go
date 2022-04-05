@@ -1,7 +1,6 @@
 package mdrender
 
 import (
-	"log"
 	"strconv"
 
 	"github.com/diamondburned/chatkit/md/block"
@@ -214,7 +213,6 @@ func (r *Renderer) InsertSegments(text *block.TextBlock, segs *text.Segments) {
 		// Also, At() returns a value but Value() has a pointer receiver. That's
 		// just really dumb.
 		seg := segs.At(i)
-		log.Println("    |", string(seg.Value(r.src)))
 		text.Insert(string(seg.Value(r.src)))
 	}
 }
