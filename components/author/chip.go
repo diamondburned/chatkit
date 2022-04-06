@@ -101,6 +101,7 @@ func (c *Chip) Unpad() {
 // The inserted anchor is returned.
 func (c *Chip) InsertText(text *gtk.TextView, iter *gtk.TextIter) *gtk.TextChildAnchor {
 	buffer := text.Buffer()
+	buffer.Insert(iter, "\u200b")
 
 	anchor := buffer.CreateChildAnchor(iter)
 	text.AddChildAtAnchor(c, anchor)
