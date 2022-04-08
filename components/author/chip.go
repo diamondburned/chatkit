@@ -65,6 +65,7 @@ func NewChip(ctx context.Context, avatarProvider imgutil.Provider) *Chip {
 
 	c.Name = gtk.NewLabel("")
 	c.Name.AddCSSClass("mauthor-chip-colored")
+	c.Name.SetVAlign(gtk.AlignCenter)
 	c.Name.SetXAlign(0.4) // account for the right round corner
 
 	c.Avatar = onlineimage.NewAvatar(ctx, avatarProvider, ChipAvatarSize)
