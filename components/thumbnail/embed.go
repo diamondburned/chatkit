@@ -7,7 +7,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/diamondburned/gotk4/pkg/gdk/v4"
+	"github.com/diamondburned/gotk4/pkg/gdkpixbuf/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 	"github.com/diamondburned/gotk4/pkg/pango"
 	"github.com/diamondburned/gotkit/gtkutil"
@@ -48,6 +48,20 @@ func TypeFromURL(url string) EmbedType {
 	return EmbedTypeImage
 }
 
+// EmbedOpts contains options for Embed.
+type EmbedOpts struct {
+	// Type is the embed type. Default is Image.
+	Type EmbedType
+	// Provider is the image provider to use. Default is HTTPProvider.
+	Provider imgutil.Provider
+	// Whole, if true, will make errors show in its full information instead of
+	// being hidden behind an error icon. Use this for messages only.
+	Whole bool
+	// CanHide, if true, will make the image hide itself on error. Use this for
+	// anything not important, like embeds.
+	CanHide bool
+}
+
 // Embed is a user-clickable image with an open callback.
 type Embed struct {
 	*gtk.Button
@@ -56,15 +70,10 @@ type Embed struct {
 	openURL func()
 	name    string
 
+	pixbuf  *gdkpixbuf.Pixbuf
 	curSize [2]int
 	maxSize [2]int
-
-	// Whole, if true, will make errors show in its full information instead of
-	// being hidden behind an error icon. Use this for messages only.
-	Whole bool
-	// CanHide, if true, will make the image hide itself on error. Use this for
-	// anything not important, like embeds.
-	CanHide bool
+	opts    EmbedOpts
 }
 
 var embedCSS = cssutil.Applier("thumbnail-embed", `
@@ -116,10 +125,15 @@ var embedCSS = cssutil.Applier("thumbnail-embed", `
 	}
 `)
 
-// NewEmbed creates an thumbnail Embed.
-func NewEmbed(typ EmbedType, maxW, maxH int) *Embed {
+// NewEmbed creates a thumbnail Embed.
+func NewEmbed(maxW, maxH int, opts EmbedOpts) *Embed {
+	if opts.Provider == nil {
+		opts.Provider = imgutil.HTTPProvider
+	}
+
 	e := &Embed{
 		maxSize: [2]int{maxW, maxH},
+		opts:    opts,
 	}
 
 	e.Image = gtk.NewPicture()
@@ -128,6 +142,12 @@ func NewEmbed(typ EmbedType, maxW, maxH int) *Embed {
 	e.Image.SetCanFocus(false)
 	e.Image.SetCanShrink(true)
 	e.Image.SetKeepAspectRatio(true)
+	e.Image.NotifyProperty("scale-factor", func() {
+		if e.pixbuf != nil {
+			// Update our displaying pixbuf to the new scale factor if possible.
+			e.setPixbuf(e.pixbuf)
+		}
+	})
 
 	e.Button = gtk.NewButton()
 	e.Button.SetOverflow(gtk.OverflowHidden)
@@ -137,7 +157,7 @@ func NewEmbed(typ EmbedType, maxW, maxH int) *Embed {
 	e.Button.ConnectClicked(func() { e.openURL() })
 	embedCSS(e)
 
-	if typ == EmbedTypeImage {
+	if opts.Type == EmbedTypeImage {
 		e.Button.AddCSSClass("thumbnail-embed-typeimage")
 		e.Button.SetChild(e.Image)
 	} else {
@@ -146,7 +166,7 @@ func NewEmbed(typ EmbedType, maxW, maxH int) *Embed {
 		overlay.AddCSSClass("thumbnail-embed-overlay")
 		e.Button.SetChild(overlay)
 
-		switch typ {
+		switch opts.Type {
 		case EmbedTypeVideo:
 			e.Button.AddCSSClass("thumbnail-embed-typevideo")
 
@@ -187,32 +207,42 @@ func (e *Embed) SetFromURL(ctx context.Context, url string) {
 
 	// Only load the image when we actually draw the image.
 	gtkutil.OnFirstDraw(e, func() {
-		imgutil.AsyncGET(ctx, url, e.setPaintable)
+		imgutil.DoProviderURL(ctx, e.opts.Provider, url, e.setPixbuf)
 	})
 }
 
-func (e *Embed) setPaintable(p gdk.Paintabler) {
-	e.SetSize(p.IntrinsicWidth(), p.IntrinsicHeight())
-	e.Image.SetPaintable(p)
+func (e *Embed) setPixbuf(p *gdkpixbuf.Pixbuf) {
+	e.pixbuf = p
+	e.SetSize(p.Width(), p.Height())
+
+	// If our scale factor for the image is 1, then we should rescale the pixbuf
+	// manually, because GTK's built-in image scaler is unusable with lots of
+	// artifacts that are apparent in 1x.
+	if e.Image.ScaleFactor() == 1 {
+		p = p.ScaleSimple(e.curSize[0], e.curSize[1], gdkpixbuf.InterpTiles)
+	}
+
+	e.Image.SetPixbuf(p)
 	e.Image.QueueResize()
 
 	// undo effects
 
-	if e.CanHide {
+	if e.opts.CanHide {
 		e.Show()
 	}
-	if e.Whole {
+
+	if e.opts.Whole {
 		e.Button.SetChild(e.Image)
 	}
 }
 
 func (e *Embed) onError(err error) {
-	if e.CanHide {
+	if e.opts.CanHide {
 		e.Hide()
 		return
 	}
 
-	if e.Whole {
+	if e.opts.Whole {
 		// Mild annoyance: the padding of this label actually grows the image a
 		// bit. Not sure how to fix it.
 		errLabel := gtk.NewLabel("Error fetching image: " + html.EscapeString(err.Error()))
@@ -251,4 +281,10 @@ func (e *Embed) SetSize(w, h int) {
 	w, h = imgutil.MaxSize(w, h, e.maxSize[0], e.maxSize[1])
 	e.curSize = [2]int{w, h}
 	e.SetSizeRequest(w, h)
+}
+
+// Size returns the embed size, or 0 if no images have been fetched yet or if
+// SetSize has never been called before.
+func (e *Embed) Size() (w, h int) {
+	return e.curSize[0], e.curSize[1]
 }
