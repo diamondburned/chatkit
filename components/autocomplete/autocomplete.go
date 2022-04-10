@@ -2,7 +2,6 @@ package autocomplete
 
 import (
 	"context"
-	"runtime"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -62,10 +61,11 @@ type Autocompleter struct {
 
 	searchers map[rune]Searcher
 
-	parent   context.Context
-	cancel   context.CancelFunc
-	timeout  time.Duration
-	poppedUp bool
+	parent         context.Context
+	cancel         context.CancelFunc
+	timeout        time.Duration
+	poppedUp       bool
+	cancelOnChange bool
 }
 
 type row struct {
@@ -130,18 +130,25 @@ func New(ctx context.Context, text *gtk.TextView, f SelectedFunc) *Autocompleter
 		searchers: make(map[rune]Searcher),
 	}
 
-	list.ConnectRowActivated(func(row *gtk.ListBoxRow) {
-		ac.selectRow(row)
-	})
-
-	// Ensure the context is cleaned up.
-	runtime.SetFinalizer(&ac, func(ac *Autocompleter) {
+	text.ConnectUnmap(func() {
+		// Ensure the context is cleaned up.
 		if ac.cancel != nil {
 			ac.cancel()
 		}
 	})
 
+	list.ConnectRowActivated(func(row *gtk.ListBoxRow) {
+		ac.selectRow(row)
+	})
+
 	return &ac
+}
+
+// SetCancelOnChange sets whether or not the autocompleter context should be
+// cancelled every time the buffer is changed. Default is false, so the context
+// is alive even when the old widgets are thrown away.
+func (a *Autocompleter) SetCancelOnChange(v bool) {
+	a.cancelOnChange = v
 }
 
 // SetTimeout sets the timeout for each autocompletion.
@@ -202,8 +209,10 @@ func (a *Autocompleter) Autocomplete() {
 	}
 
 	// cancelled on next run
-	ctx, cancel := context.WithCancel(a.parent)
-	a.cancel = cancel
+	ctx := a.parent
+	if a.cancelOnChange {
+		ctx, a.cancel = context.WithCancel(a.parent)
+	}
 
 	searchCtx, cancel := context.WithTimeout(ctx, a.timeout)
 	defer cancel()
