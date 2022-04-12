@@ -3,6 +3,7 @@ package block
 import (
 	"context"
 
+	"github.com/diamondburned/gotk4/pkg/gio/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 )
 
@@ -46,4 +47,19 @@ func (v *Viewer) State() *ContainerState {
 // TagTable returns the viewer's shared TextTagTable.
 func (v *Viewer) TagTable() *gtk.TextTagTable {
 	return v.table
+}
+
+// SetExtraMenu sets the given menu for all children widget nodes.
+func (v *Viewer) SetExtraMenu(model gio.MenuModeller) {
+	v.state.Walk(func(w WidgetBlock) bool {
+		switch w := w.(type) {
+		case TextWidgetBlock:
+			w.TextBlock().SetExtraMenu(model)
+		case interface{ SetExtraMenu(model gio.MenuModeller) }:
+			w.SetExtraMenu(model)
+		case *CodeBlock:
+			w.text.SetExtraMenu(model)
+		}
+		return false
+	})
 }
