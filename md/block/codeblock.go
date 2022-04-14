@@ -288,6 +288,7 @@ func (b *CodeBlock) Highlight(language string) {
 	b.text.Buffer.ApplyTag(noHyphens, start, end)
 
 	if language != "" {
+		b.lang.SetText(language)
 		hl.Highlight(b.state.Context(), start, end, language)
 	}
 }
