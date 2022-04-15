@@ -207,7 +207,9 @@ func (e *Embed) SetFromURL(ctx context.Context, url string) {
 
 	// Only load the image when we actually draw the image.
 	gtkutil.OnFirstDraw(e, func() {
-		imgutil.DoProviderURL(ctx, e.opts.Provider, url, e.setPixbuf)
+		imgutil.DoProviderURL(ctx, e.opts.Provider, url, imgutil.ImageSetter{
+			SetFromPixbuf: e.setPixbuf,
+		})
 	})
 }
 
