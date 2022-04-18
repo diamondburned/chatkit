@@ -7,10 +7,9 @@ import (
 	"path"
 	"strings"
 
-	"github.com/diamondburned/gotk4/pkg/gdkpixbuf/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 	"github.com/diamondburned/gotk4/pkg/pango"
-	"github.com/diamondburned/gotkit/gtkutil"
+	"github.com/diamondburned/gotkit/components/onlineimage"
 	"github.com/diamondburned/gotkit/gtkutil/cssutil"
 	"github.com/diamondburned/gotkit/gtkutil/imgutil"
 )
@@ -65,12 +64,11 @@ type EmbedOpts struct {
 // Embed is a user-clickable image with an open callback.
 type Embed struct {
 	*gtk.Button
-	Image *gtk.Picture
+	Image *onlineimage.Picture
 
 	openURL func()
 	name    string
 
-	pixbuf  *gdkpixbuf.Pixbuf
 	curSize [2]int
 	maxSize [2]int
 	opts    EmbedOpts
@@ -96,7 +94,7 @@ var embedCSS = cssutil.Applier("thumbnail-embed", `
 		background-color: black;
 		transition: linear 50ms filter;
 	}
-	.thumbnail-embed:hover .thumbnail-embed-image {
+	.thumbnail-embed:not(.thumbnail-embed-interactive):hover .thumbnail-embed-image {
 		filter: contrast(80%) brightness(80%);
 	}
 	.thumbnail-embed-errorlabel {
@@ -126,7 +124,7 @@ var embedCSS = cssutil.Applier("thumbnail-embed", `
 `)
 
 // NewEmbed creates a thumbnail Embed.
-func NewEmbed(maxW, maxH int, opts EmbedOpts) *Embed {
+func NewEmbed(ctx context.Context, maxW, maxH int, opts EmbedOpts) *Embed {
 	if opts.Provider == nil {
 		opts.Provider = imgutil.HTTPProvider
 	}
@@ -136,18 +134,17 @@ func NewEmbed(maxW, maxH int, opts EmbedOpts) *Embed {
 		opts:    opts,
 	}
 
-	e.Image = gtk.NewPicture()
+	ctx = imgutil.WithOpts(ctx,
+		imgutil.WithErrorFn(e.onError),
+		// imgutil.WithRescale(maxW, maxH),
+	)
+
+	e.Image = onlineimage.NewPicture(ctx, opts.Provider)
 	e.Image.AddCSSClass("thumbnail-embed-image")
 	e.Image.SetLayoutManager(gtk.NewConstraintLayout()) // magically left aligned
 	e.Image.SetCanFocus(false)
 	e.Image.SetCanShrink(true)
 	e.Image.SetKeepAspectRatio(true)
-	e.Image.NotifyProperty("scale-factor", func() {
-		if e.pixbuf != nil {
-			// Update our displaying pixbuf to the new scale factor if possible.
-			e.setPixbuf(e.pixbuf)
-		}
-	})
 
 	e.Button = gtk.NewButton()
 	e.Button.SetOverflow(gtk.OverflowHidden)
@@ -188,8 +185,34 @@ func NewEmbed(maxW, maxH int, opts EmbedOpts) *Embed {
 			gif.SetHAlign(gtk.AlignEnd)   // right
 
 			overlay.AddOverlay(gif)
+
+			if onlineimage.CanAnimate {
+				e.Button.AddCSSClass("thumbnail-embed-interactive")
+
+				motion := gtk.NewEventControllerMotion()
+				e.Button.AddController(motion)
+
+				anim := e.Image.EnableAnimation()
+
+				// Show or hide the GIF icon while it's playing.
+				motion.ConnectEnter(func(x, y float64) {
+					anim.Start()
+					gif.Hide()
+				})
+				motion.ConnectLeave(func() {
+					anim.Stop()
+					gif.Show()
+				})
+			}
 		}
 	}
+
+	e.Image.NotifyProperty("paintable", func() {
+		if p := e.Image.Paintable(); p != nil {
+			e.SetSize(p.IntrinsicWidth(), p.IntrinsicHeight())
+			e.finishSetting()
+		}
+	})
 
 	return e
 }
@@ -198,37 +221,18 @@ func NewEmbed(maxW, maxH int, opts EmbedOpts) *Embed {
 // name.
 func (e *Embed) SetName(name string) {
 	e.name = name
-	e.Button.SetTooltipText(name)
+	if !e.Button.HasCSSClass("thumbnail-embed-interactive") {
+		e.Button.SetTooltipText(name)
+	}
 }
 
 // SetFromURL sets the URL of the thumbnail embed.
-func (e *Embed) SetFromURL(ctx context.Context, url string) {
-	ctx = imgutil.WithOpts(ctx, imgutil.WithErrorFn(e.onError))
-
-	// Only load the image when we actually draw the image.
-	gtkutil.OnFirstDraw(e, func() {
-		imgutil.DoProviderURL(ctx, e.opts.Provider, url, imgutil.ImageSetter{
-			SetFromPixbuf: e.setPixbuf,
-		})
-	})
+func (e *Embed) SetFromURL(url string) {
+	e.Image.SetURL(url)
 }
 
-func (e *Embed) setPixbuf(p *gdkpixbuf.Pixbuf) {
-	e.pixbuf = p
-	e.SetSize(p.Width(), p.Height())
-
-	// If our scale factor for the image is 1, then we should rescale the pixbuf
-	// manually, because GTK's built-in image scaler is unusable with lots of
-	// artifacts that are apparent in 1x.
-	if e.Image.ScaleFactor() == 1 {
-		p = p.ScaleSimple(e.curSize[0], e.curSize[1], gdkpixbuf.InterpTiles)
-	}
-
-	e.Image.SetPixbuf(p)
-	e.Image.QueueResize()
-
-	// undo effects
-
+// undo effects
+func (e *Embed) finishSetting() {
 	if e.opts.CanHide {
 		e.Show()
 	}

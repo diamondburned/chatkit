@@ -4,8 +4,8 @@ go 1.17
 
 require (
 	github.com/alecthomas/chroma v0.10.0
-	github.com/diamondburned/gotk4/pkg v0.0.0-20220408070453-08962439fbbc
-	github.com/diamondburned/gotkit v0.0.0-20220415082407-229fe82c8ceb
+	github.com/diamondburned/gotk4/pkg v0.0.0-20220417091308-856167c02355
+	github.com/diamondburned/gotkit v0.0.0-20220418090814-3d8ad765902d
 	github.com/pkg/errors v0.9.1
 	github.com/yuin/goldmark v1.4.11
 	github.com/zalando/go-keyring v0.2.1
