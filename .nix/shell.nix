@@ -16,7 +16,7 @@ in shell.overrideAttrs (old: {
 		glib
 		graphene
 		gdk-pixbuf
-		gobjectIntrospection
+		gobject-introspection
 		lasem
 
 		pkgconfig
