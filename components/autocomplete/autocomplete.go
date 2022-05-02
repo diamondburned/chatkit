@@ -63,6 +63,7 @@ type Autocompleter struct {
 
 	parent         context.Context
 	cancel         context.CancelFunc
+	minChars       int
 	timeout        time.Duration
 	poppedUp       bool
 	cancelOnChange bool
@@ -144,6 +145,12 @@ func New(ctx context.Context, text *gtk.TextView, f SelectedFunc) *Autocompleter
 	return &ac
 }
 
+// SetMinLength sets the minimum number of characters before the autocompleter
+// kicks in.
+func (a *Autocompleter) SetMinLength(minLength int) {
+	a.minChars = minLength
+}
+
 // SetCancelOnChange sets whether or not the autocompleter context should be
 // cancelled every time the buffer is changed. Default is false, so the context
 // is alive even when the old widgets are thrown away.
@@ -199,14 +206,26 @@ func (a *Autocompleter) Autocomplete() {
 		return
 	}
 
-	text := a.buffer.Text(a.start, a.end, false)
-	first, text := popRune(text)
+	// Remove the prefix.
+	a.start.ForwardChar()
 
-	searcher, ok := a.searchers[first]
-	if !ok {
+	// Forward the cursor until either end of buffer or until the word
+	// terminates.
+	if a.end.ForwardFindChar(func(ch uint32) bool {
+		return unicode.IsSpace(rune(ch))
+	}, nil) {
+		// Space found. Shift it away.
+		a.end.BackwardChar()
+	}
+
+	text := a.buffer.Text(a.start, a.end, false)
+	if utf8.RuneCountInString(text) < a.minChars {
 		a.hide()
 		return
 	}
+
+	// Include the prefix again.
+	a.start.BackwardChar()
 
 	// cancelled on next run
 	ctx := a.parent
