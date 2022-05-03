@@ -25,11 +25,20 @@ func WithRenderer(kind ast.NodeKind, renderer RendererFunc) OptionFunc {
 	}
 }
 
+// WithFallbackRenderer adds a new renderer that is called on any unhandled or
+// unknown node.
+func WithFallbackRenderer(renderer RendererFunc) OptionFunc {
+	return func(r *Renderer) {
+		r.fallbackR = renderer
+	}
+}
+
 // Renderer is a rendering instance.
 type Renderer struct {
 	State *block.ContainerState
 
 	renderers map[ast.NodeKind]RendererFunc
+	fallbackR RendererFunc
 	src       []byte
 }
 
@@ -38,6 +47,11 @@ func NewRenderer(src []byte, state *block.ContainerState, opts ...OptionFunc) *R
 	r := Renderer{
 		src:   src,
 		State: state,
+	}
+
+	if len(opts) > 0 {
+		// Preallocate just in case.
+		r.renderers = make(map[ast.NodeKind]RendererFunc, len(opts))
 	}
 
 	for _, opt := range opts {
@@ -198,6 +212,10 @@ func (r *Renderer) RenderOnce(n ast.Node) ast.WalkStatus {
 		f, ok := r.renderers[n.Kind()]
 		if ok {
 			return f(r, n)
+		}
+
+		if r.fallbackR != nil {
+			return r.fallbackR(r, n)
 		}
 	}
 
