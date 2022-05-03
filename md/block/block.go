@@ -102,6 +102,15 @@ func (s *ContainerState) Append(block WidgetBlock) {
 	s.Box.Append(block)
 }
 
+// Reset clears the container state and removes all widgets from the parent box.
+func (s *ContainerState) Reset() {
+	for n := s.list.Front(); n != nil; n = n.Next() {
+		v := s.list.Remove(n)
+		s.Box.Remove(v.(WidgetBlock))
+	}
+	s.current = nil
+}
+
 // ForEach iterates over the current-level containers until f returns true.
 func (s *ContainerState) ForEach(f func(WidgetBlock) bool) {
 	for n := s.list.Front(); n != nil; n = n.Next() {
