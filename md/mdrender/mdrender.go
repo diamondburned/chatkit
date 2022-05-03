@@ -61,6 +61,11 @@ func NewRenderer(src []byte, state *block.ContainerState, opts ...OptionFunc) *R
 	return &r
 }
 
+// Source returns the source bytes slice.
+func (r *Renderer) Source() []byte {
+	return r.src
+}
+
 // Render renders n recursively.
 func (r *Renderer) Render(n ast.Node) ast.WalkStatus {
 	return r.RenderSiblings(n)
