@@ -117,6 +117,11 @@ func (r *Renderer) WithState(state *block.ContainerState) *Renderer {
 
 // RenderOnce renders a single node.
 func (r *Renderer) RenderOnce(n ast.Node) ast.WalkStatus {
+	f, ok := r.renderers[n.Kind()]
+	if ok {
+		return f(r, n)
+	}
+
 	switch n := n.(type) {
 	case *ast.String:
 		text := r.State.TextBlock()
@@ -214,11 +219,6 @@ func (r *Renderer) RenderOnce(n ast.Node) ast.WalkStatus {
 		return r.WithState(quote.State).RenderChildren(n)
 
 	default:
-		f, ok := r.renderers[n.Kind()]
-		if ok {
-			return f(r, n)
-		}
-
 		if r.fallbackR != nil {
 			return r.fallbackR(r, n)
 		}
