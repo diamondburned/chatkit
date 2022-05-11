@@ -50,13 +50,20 @@ var _ TextWidgetBlock = (*TextBlock)(nil)
 
 // NewTextBlock creates a new TextBlock.
 func NewTextBlock(state *ContainerState) *TextBlock {
+	tbuf := gtk.NewTextBuffer(state.Viewer.TagTable())
+	view := NewDefaultTextView(tbuf)
+	return NewTextBlockFromView(view, state)
+}
+
+// NewTextBlockFromView creates a new TextBlock from the given TextView.
+func NewTextBlockFromView(view *gtk.TextView, state *ContainerState) *TextBlock {
 	text := TextBlock{
-		Buffer: gtk.NewTextBuffer(state.Viewer.TagTable()),
+		Buffer: view.Buffer(),
 		state:  state,
 	}
 
 	text.Iter = text.Buffer.StartIter()
-	text.TextView = NewDefaultTextView(text.Buffer)
+	text.TextView = view
 
 	text.Buffer.SetEnableUndo(false)
 	text.AddCSSClass("md-textblock")
