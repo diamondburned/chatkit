@@ -111,7 +111,7 @@ func Markup(name string, mods ...MarkupMod) string {
 			))
 		}
 	} else {
-		b.WriteString(name)
+		b.WriteString(html.EscapeString(name))
 	}
 
 	if opts.minimal {
