@@ -14,10 +14,9 @@ import (
 // CodeBlock is a widget containing a block of code.
 type CodeBlock struct {
 	*gtk.Overlay
-	text   *TextBlock
-	state  *ContainerState
-	scroll *gtk.ScrolledWindow
-	lang   *gtk.Label
+	text  *TextBlock
+	state *ContainerState
+	lang  *gtk.Label
 }
 
 var (
@@ -26,6 +25,9 @@ var (
 )
 
 var CodeBlockCSS = cssutil.Applier("md-codeblock", `
+	.md-codeblock.frame {
+		background-color: alpha(mix(@theme_bg_color, @theme_fg_color, 0.1), 0.5);
+	}
 	.md-codeblock scrollbar {
 		background: none;
 		border:     none;
@@ -94,7 +96,23 @@ var codeUpperHeight = prefs.NewInt(400, prefs.IntMeta{
 	Max: 5000,
 })
 
-func init() { prefs.Order(codeLowerHeight, codeUpperHeight) }
+var codeBlockFixed = prefs.NewBool(false, prefs.PropMeta{
+	Name:    "Fixed Codeblock",
+	Section: "Text",
+	Description: `
+		Make codeblocks fixed-sized instead of being collapsed and scrollable.
+		This causes codeblocks to always be line-wrapped. If false, then
+		Collapsed and Expanded Codeblock Height are ignored.
+	`,
+})
+
+func init() {
+	prefs.Order(
+		codeLowerHeight,
+		codeUpperHeight,
+		codeBlockFixed,
+	)
+}
 
 // NewCodeBlock creates a new CodeBlock.
 func NewCodeBlock(state *ContainerState) *CodeBlock {
@@ -104,11 +122,6 @@ func NewCodeBlock(state *ContainerState) *CodeBlock {
 	text.SetVScrollPolicy(gtk.ScrollMinimum)
 	text.SetBottomMargin(18)
 
-	sw := gtk.NewScrolledWindow()
-	sw.SetPolicy(gtk.PolicyAutomatic, gtk.PolicyAutomatic)
-	sw.SetPropagateNaturalHeight(true)
-	sw.SetChild(text)
-
 	language := gtk.NewLabel("")
 	language.AddCSSClass("md-codeblock-language")
 	language.SetHExpand(true)
@@ -116,10 +129,6 @@ func NewCodeBlock(state *ContainerState) *CodeBlock {
 	language.SetSingleLineMode(true)
 	language.SetXAlign(0)
 	language.SetVAlign(gtk.AlignCenter)
-
-	wrap := gtk.NewToggleButton()
-	wrap.SetIconName("format-justify-left-symbolic")
-	wrap.SetTooltipText("Toggle Word Wrapping")
 
 	copy := gtk.NewButtonFromIconName("edit-copy-symbolic")
 	copy.SetTooltipText("Copy All")
@@ -144,129 +153,151 @@ func NewCodeBlock(state *ContainerState) *CodeBlock {
 		})
 	})
 
-	expand := gtk.NewToggleButton()
-	expand.SetTooltipText("Toggle Reveal Code")
-
 	actions := gtk.NewBox(gtk.OrientationHorizontal, 0)
 	actions.AddCSSClass("md-codeblock-actions")
 	actions.SetHAlign(gtk.AlignFill)
 	actions.SetVAlign(gtk.AlignStart)
 	actions.Append(language)
-	actions.Append(wrap)
 	actions.Append(copy)
-	actions.Append(expand)
-
-	clickOverlay := gtk.NewBox(gtk.OrientationVertical, 0)
-	clickOverlay.Append(sw)
-	// Clicking on the codeblock will click the button for us, but only if it's
-	// collapsed.
-	click := gtk.NewGestureClick()
-	click.SetButton(gdk.BUTTON_PRIMARY)
-	click.SetExclusive(true)
-	click.ConnectPressed(func(n int, x, y float64) {
-		// TODO: don't handle this on a touchscreen.
-		if !expand.Active() {
-			expand.Activate()
-		}
-	})
-	clickOverlay.AddController(click)
 
 	overlay := gtk.NewOverlay()
 	overlay.SetOverflow(gtk.OverflowHidden)
-	overlay.SetChild(clickOverlay)
-	overlay.AddOverlay(actions)
 	overlay.SetMeasureOverlay(actions, true)
 	overlay.AddCSSClass("frame")
 	CodeBlockCSS(overlay)
 
-	// Lazily initialized in notify::upper below.
-	var cover *gtk.Box
-	coverSetVisible := func(visible bool) {
-		if cover != nil {
-			cover.SetVisible(visible)
-		}
-	}
+	if codeBlockFixed.Value() {
+		text.SetWrapMode(gtk.WrapWordChar)
 
-	// Manually keep track of the expanded height, since SetMaxContentHeight
-	// doesn't work (below issue).
-	var maxHeight int
-	var minHeight int
+		vbox := gtk.NewBox(gtk.OrientationVertical, 0)
+		vbox.Append(actions)
+		vbox.Append(text)
 
-	vadj := text.VAdjustment()
+		overlay.AddCSSClass("md-codeblock-fixed")
+		overlay.AddCSSClass("md-codeblock-expanded")
+		overlay.SetChild(vbox)
+	} else {
+		sw := gtk.NewScrolledWindow()
+		sw.SetPolicy(gtk.PolicyAutomatic, gtk.PolicyAutomatic)
+		sw.SetPropagateNaturalHeight(true)
+		sw.SetChild(text)
 
-	toggleExpand := func() {
-		if expand.Active() {
-			overlay.AddCSSClass("md-codeblock-expanded")
-			expand.SetIconName("view-restore-symbolic")
-			sw.SetCanTarget(true)
-			sw.SetSizeRequest(-1, maxHeight)
-			sw.SetMarginTop(actions.AllocatedHeight())
-			language.SetOpacity(1)
-			coverSetVisible(false)
-		} else {
-			overlay.RemoveCSSClass("md-codeblock-expanded")
-			expand.SetIconName("view-fullscreen-symbolic")
-			sw.SetCanTarget(false)
-			sw.SetSizeRequest(-1, minHeight)
-			sw.SetMarginTop(0)
-			language.SetOpacity(0)
-			coverSetVisible(true)
-			// Restore scrolling when uncollapsed.
-			vadj.SetValue(0)
-		}
-	}
-	expand.ConnectClicked(toggleExpand)
+		wrap := gtk.NewToggleButton()
+		wrap.SetIconName("format-justify-left-symbolic")
+		wrap.SetTooltipText("Toggle Word Wrapping")
+		wrap.ConnectClicked(func() {
+			if wrap.Active() {
+				text.SetWrapMode(gtk.WrapWordChar)
+			} else {
+				// TODO: this doesn't shrink back, which is weird.
+				text.SetWrapMode(gtk.WrapNone)
+			}
+		})
 
-	// Workaround for issue https://gitlab.gnome.org/GNOME/gtk/-/issues/3515.
-	vadj.NotifyProperty("upper", func() {
-		upperHeight := codeUpperHeight.Value()
-		lowerHeight := codeLowerHeight.Value()
-		if upperHeight < lowerHeight {
-			upperHeight = lowerHeight
-		}
+		expand := gtk.NewToggleButton()
+		expand.SetTooltipText("Toggle Reveal Code")
 
-		upper := int(vadj.Upper())
-		maxHeight = upper
-		minHeight = upper
+		actions.Append(wrap)
+		actions.Append(expand)
 
-		if maxHeight > upperHeight {
-			maxHeight = upperHeight
-		}
+		clickOverlay := gtk.NewBox(gtk.OrientationVertical, 0)
+		clickOverlay.Append(sw)
 
-		if minHeight > lowerHeight {
-			minHeight = lowerHeight
-			overlay.AddCSSClass("md-codeblock-voverflow")
+		overlay.SetChild(clickOverlay)
+		overlay.AddOverlay(actions)
 
-			if cover == nil {
-				// Use a fading gradient to let the user know (visually) that
-				// there's still more code hidden. This isn't very accessible.
-				cover = gtk.NewBox(gtk.OrientationHorizontal, 0)
-				cover.AddCSSClass("md-codeblock-cover")
-				cover.SetCanTarget(false)
-				cover.SetVAlign(gtk.AlignFill)
-				cover.SetHAlign(gtk.AlignFill)
-				overlay.AddOverlay(cover)
+		// Clicking on the codeblock will click the button for us, but only if it's
+		// collapsed.
+		click := gtk.NewGestureClick()
+		click.SetButton(gdk.BUTTON_PRIMARY)
+		click.SetExclusive(true)
+		click.ConnectPressed(func(n int, x, y float64) {
+			// TODO: don't handle this on a touchscreen.
+			if !expand.Active() {
+				expand.Activate()
+			}
+		})
+		clickOverlay.AddController(click)
+
+		// Lazily initialized in notify::upper below.
+		var cover *gtk.Box
+		coverSetVisible := func(visible bool) {
+			if cover != nil {
+				cover.SetVisible(visible)
 			}
 		}
 
-		// Quite expensive when it's put here, but it's safer.
-		toggleExpand()
-	})
+		// Manually keep track of the expanded height, since SetMaxContentHeight
+		// doesn't work (below issue).
+		var maxHeight int
+		var minHeight int
 
-	wrap.ConnectClicked(func() {
-		if wrap.Active() {
-			text.SetWrapMode(gtk.WrapWordChar)
-		} else {
-			// TODO: this doesn't shrink back, which is weird.
-			text.SetWrapMode(gtk.WrapNone)
+		vadj := text.VAdjustment()
+
+		toggleExpand := func() {
+			if expand.Active() {
+				overlay.AddCSSClass("md-codeblock-expanded")
+				expand.SetIconName("view-restore-symbolic")
+				sw.SetCanTarget(true)
+				sw.SetSizeRequest(-1, maxHeight)
+				sw.SetMarginTop(actions.AllocatedHeight())
+				language.SetOpacity(1)
+				coverSetVisible(false)
+			} else {
+				overlay.RemoveCSSClass("md-codeblock-expanded")
+				expand.SetIconName("view-fullscreen-symbolic")
+				sw.SetCanTarget(false)
+				sw.SetSizeRequest(-1, minHeight)
+				sw.SetMarginTop(0)
+				language.SetOpacity(0)
+				coverSetVisible(true)
+				// Restore scrolling when uncollapsed.
+				vadj.SetValue(0)
+			}
 		}
-	})
+		expand.ConnectClicked(toggleExpand)
+
+		// Workaround for issue https://gitlab.gnome.org/GNOME/gtk/-/issues/3515.
+		vadj.NotifyProperty("upper", func() {
+			upperHeight := codeUpperHeight.Value()
+			lowerHeight := codeLowerHeight.Value()
+			if upperHeight < lowerHeight {
+				upperHeight = lowerHeight
+			}
+
+			upper := int(vadj.Upper())
+			maxHeight = upper
+			minHeight = upper
+
+			if maxHeight > upperHeight {
+				maxHeight = upperHeight
+			}
+
+			if minHeight > lowerHeight {
+				minHeight = lowerHeight
+				overlay.AddCSSClass("md-codeblock-voverflow")
+
+				if cover == nil {
+					// Use a fading gradient to let the user know (visually) that
+					// there's still more code hidden. This isn't very accessible.
+					cover = gtk.NewBox(gtk.OrientationHorizontal, 0)
+					cover.AddCSSClass("md-codeblock-cover")
+					cover.SetCanTarget(false)
+					cover.SetVAlign(gtk.AlignFill)
+					cover.SetHAlign(gtk.AlignFill)
+					overlay.AddOverlay(cover)
+				}
+			}
+
+			// Quite expensive when it's put here, but it's safer.
+			toggleExpand()
+		})
+	}
 
 	return &CodeBlock{
 		Overlay: overlay,
 		text:    text,
 		state:   state,
-		scroll:  sw,
 		lang:    language,
 	}
 }
