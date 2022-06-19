@@ -12,8 +12,8 @@ github.com/diamondburned/adaptive v0.0.2-0.20220226002257-ef8720b54399/go.mod h1
 github.com/diamondburned/gotk4/pkg v0.0.0-20220225135826-2bb7260a63bb/go.mod h1:dJ2gfR0gvBsGg4IteP8aMBq/U5Q9boDw0DP7kAjXTwM=
 github.com/diamondburned/gotk4/pkg v0.0.0-20220417091308-856167c02355 h1:5J/EC+03IaQPbg8llTadKW7e+hNWBaY/eZXm5cXPTas=
 github.com/diamondburned/gotk4/pkg v0.0.0-20220417091308-856167c02355/go.mod h1:rLH6FHos690jFgAM/GYEpMykuE/9NmN6zOvFlr8JTvE=
-github.com/diamondburned/gotkit v0.0.0-20220418090814-3d8ad765902d h1:5Ct0qO6ZMt9owZ77Bsk7rSSbiZyNH17R0J5gd+pkp7w=
-github.com/diamondburned/gotkit v0.0.0-20220418090814-3d8ad765902d/go.mod h1:vPfJRyjYv+hBfsnWf9Ouacp1Urltx8/qy5b0TWyeZNo=
+github.com/diamondburned/gotkit v0.0.0-20220619054700-903bca2ed748 h1:ZZbvGvdLXWVZmDYnvqHq9DDoK2jkDzNVR6wjFjJNfqI=
+github.com/diamondburned/gotkit v0.0.0-20220619054700-903bca2ed748/go.mod h1:vPfJRyjYv+hBfsnWf9Ouacp1Urltx8/qy5b0TWyeZNo=
 github.com/dlclark/regexp2 v1.4.0 h1:F1rxgk7p4uKjwIQxBs9oAXe5CqrXlCduYEJvrF4u93E=
 github.com/dlclark/regexp2 v1.4.0/go.mod h1:2pZnwuY/m+8K6iRw6wQdMtk+rH5tNGR1i55kozfMjCc=
 github.com/godbus/dbus/v5 v5.0.6 h1:mkgN1ofwASrYnJ5W6U/BxG15eXXXjirgZc7CLqkcaro=
