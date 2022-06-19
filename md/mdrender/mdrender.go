@@ -193,6 +193,13 @@ func (r *Renderer) RenderOnce(n ast.Node) ast.WalkStatus {
 		return ast.WalkContinue
 
 	case *ast.Paragraph:
+		// Fix stupid assumptions about HTML.
+		if n.ChildCount() == 1 {
+			if _, ok := n.FirstChild().(*ast.FencedCodeBlock); ok {
+				break
+			}
+		}
+
 		text := r.State.TextBlock()
 		text.EndLine(2)
 
