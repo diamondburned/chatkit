@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 
 	"github.com/diamondburned/gotk4/pkg/core/glib"
+	"github.com/diamondburned/gotkit/gtkutil/httputil"
 	"github.com/pkg/errors"
 )
 
@@ -82,7 +83,9 @@ func download(ctx context.Context, url, dst string, b *Bar) error {
 		return err
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	client := httputil.FromContext(ctx, http.DefaultClient)
+
+	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}
