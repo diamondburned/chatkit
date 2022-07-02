@@ -201,14 +201,11 @@ func New(ctx context.Context, maxW, maxH int, opts Opts) *Embed {
 
 	e.Thumbnail = onlineimage.NewPicture(ctx, opts.Provider)
 	e.Thumbnail.AddCSSClass("thumbnail-embed-image")
-	e.Thumbnail.SetLayoutManager(gtk.NewConstraintLayout()) // magically left aligned
-	e.Thumbnail.SetCanFocus(false)
 	e.Thumbnail.SetCanShrink(true)
 	e.Thumbnail.SetKeepAspectRatio(true)
 
 	e.Button = gtk.NewButton()
 	e.Button.SetHasFrame(false)
-	e.Button.SetCanTarget(false)
 	e.Button.ConnectClicked(func() { e.click() })
 
 	e.Frame = gtk.NewFrame("")
