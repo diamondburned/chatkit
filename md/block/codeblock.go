@@ -162,7 +162,6 @@ func NewCodeBlock(state *ContainerState) *CodeBlock {
 
 	overlay := gtk.NewOverlay()
 	overlay.SetOverflow(gtk.OverflowHidden)
-	overlay.SetMeasureOverlay(actions, true)
 	overlay.AddCSSClass("frame")
 	CodeBlockCSS(overlay)
 
