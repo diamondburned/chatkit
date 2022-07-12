@@ -133,6 +133,7 @@ func (b *TextBlock) InsertNewLines(n int) {
 func (b *TextBlock) ApplyLink(url string, start, end *gtk.TextIter) {
 	b.Buffer.ApplyTag(b.EmptyTag(md.URLTagName(url)), start, end)
 	b.Buffer.ApplyTag(textutil.LinkTags().FromTable(b.state.TagTable(), "a"), start, end)
+	b.ConnectLinkHandler()
 }
 
 // EmptyTag gets an existing tag or creates a new empty one with the given name.
