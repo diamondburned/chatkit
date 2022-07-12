@@ -9,14 +9,6 @@ import (
 	"github.com/diamondburned/gotkit/gtkutil/textutil"
 )
 
-// urlTagPrefix is the prefix for tag names that identify a hyperlinked URL.
-const urlTagPrefix = "link:"
-
-// URLTagName creates a new URL tag name from the given URL.
-func URLTagName(url string) string {
-	return urlTagPrefix + url
-}
-
 // BindLinkHandler binds input handlers for triggering hyperlinks within the
 // TextView. If BindLinkHandler is called on the same TextView again, then it
 // does nothing. The function checks this by checking for the .gmd-hyperlinked
@@ -52,22 +44,8 @@ func BindLinkHandler(tview *gtk.TextView, onURL func(string)) {
 		return nil
 	}
 
-	var buf *gtk.TextBuffer
-	var table *gtk.TextTagTable
-	var iters [2]*gtk.TextIter
-
-	needIters := func() {
-		if buf == nil {
-			buf = tview.Buffer()
-			table = buf.TagTable()
-		}
-
-		if iters == [2]*gtk.TextIter{} {
-			i1 := buf.IterAtOffset(0)
-			i2 := buf.IterAtOffset(0)
-			iters = [2]*gtk.TextIter{i1, i2}
-		}
-	}
+	buf := tview.Buffer()
+	table := buf.TagTable()
 
 	click := gtk.NewGestureClick()
 	click.SetButton(1)
@@ -80,13 +58,8 @@ func BindLinkHandler(tview *gtk.TextView, onURL func(string)) {
 		if u := checkURL(x, y); u != nil {
 			onURL(u.URL)
 
-			needIters()
 			tag := linkTags.FromBuffer(buf, "a:visited")
-
-			iters[0].SetOffset(u.From)
-			iters[1].SetOffset(u.To)
-
-			buf.ApplyTag(tag, iters[0], iters[1])
+			buf.ApplyTag(tag, buf.IterAtOffset(u.From), buf.IterAtOffset(u.To))
 		}
 	})
 
@@ -97,11 +70,7 @@ func BindLinkHandler(tview *gtk.TextView, onURL func(string)) {
 
 	unhover := func() {
 		if lastURL != nil {
-			needIters()
-			iters[0].SetOffset(lastURL.From)
-			iters[1].SetOffset(lastURL.To)
-			buf.RemoveTag(lastTag, iters[0], iters[1])
-
+			buf.RemoveTag(lastTag, buf.IterAtOffset(lastURL.From), buf.IterAtOffset(lastURL.To))
 			lastURL = nil
 			lastTag = nil
 		}
@@ -110,7 +79,6 @@ func BindLinkHandler(tview *gtk.TextView, onURL func(string)) {
 	motion := gtk.NewEventControllerMotion()
 	motion.ConnectLeave(func() {
 		unhover()
-		iters = [2]*gtk.TextIter{}
 	})
 	motion.ConnectMotion(func(x, y float64) {
 		u := checkURL(x, y)
@@ -121,12 +89,8 @@ func BindLinkHandler(tview *gtk.TextView, onURL func(string)) {
 		unhover()
 
 		if u != nil {
-			needIters()
-			iters[0].SetOffset(u.From)
-			iters[1].SetOffset(u.To)
-
 			hover := linkTags.FromTable(table, "a:hover")
-			buf.ApplyTag(hover, iters[0], iters[1])
+			buf.ApplyTag(hover, buf.IterAtOffset(u.From), buf.IterAtOffset(u.To))
 
 			lastURL = u
 			lastTag = hover
@@ -137,12 +101,20 @@ func BindLinkHandler(tview *gtk.TextView, onURL func(string)) {
 	tview.AddController(motion)
 }
 
+// urlTagPrefix is the prefix for tag names that identify a hyperlinked URL.
+const urlTagPrefix = "link:"
+
 // EmbeddedURL is a type that describes a URL and its bounds within a text
 // buffer.
 type EmbeddedURL struct {
 	From int    `json:"1"`
 	To   int    `json:"2"`
 	URL  string `json:"u"`
+}
+
+// URLTagName creates a new URL tag name from the given URL.
+func URLTagName(start, end *gtk.TextIter, url string) string {
+	return urlTagPrefix + embedURL(start.Offset(), end.Offset(), url)
 }
 
 func embedURL(x, y int, url string) string {
@@ -157,13 +129,11 @@ func embedURL(x, y int, url string) string {
 // ParseEmbeddedURL parses the inlined data into an embedded URL structure.
 func ParseEmbeddedURL(data string) (EmbeddedURL, bool) {
 	var d EmbeddedURL
-	err := json.Unmarshal([]byte(data), &d)
-	return d, err == nil
-}
 
-// Bounds returns the bound iterators from the given text buffer.
-func (e *EmbeddedURL) Bounds(buf *gtk.TextBuffer) (start, end *gtk.TextIter) {
-	startIter := buf.IterAtOffset(e.From)
-	endIter := buf.IterAtOffset(e.To)
-	return startIter, endIter
+	if err := json.Unmarshal([]byte(data), &d); err != nil {
+		log.Println("error parsing internal embedded URL:", err)
+		return d, false
+	}
+
+	return d, true
 }

@@ -131,7 +131,8 @@ func (b *TextBlock) InsertNewLines(n int) {
 
 // ApplyLink applies tags denoting a hyperlink.
 func (b *TextBlock) ApplyLink(url string, start, end *gtk.TextIter) {
-	b.Buffer.ApplyTag(b.EmptyTag(md.URLTagName(url)), start, end)
+	embedURL := md.URLTagName(start, end, url)
+	b.Buffer.ApplyTag(b.EmptyTag(embedURL), start, end)
 	b.Buffer.ApplyTag(textutil.LinkTags().FromTable(b.state.TagTable(), "a"), start, end)
 	b.ConnectLinkHandler()
 }
