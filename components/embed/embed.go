@@ -4,12 +4,12 @@ import (
 	"context"
 	"crypto/sha1"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"html"
 	"io"
 	"mime"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -27,6 +27,7 @@ import (
 	"github.com/diamondburned/gotkit/gtkutil/imgutil"
 	"github.com/diamondburned/gotkit/utils/cachegc"
 	"github.com/dustin/go-humanize"
+	"github.com/pkg/errors"
 )
 
 // EmbedType indicates the type of the Embed being constructed. The type
@@ -297,9 +298,9 @@ func New(ctx context.Context, maxW, maxH int, opts Opts) *Embed {
 		}
 	}
 
-	e.Thumbnail.NotifyProperty("paintable", func() {
+	e.NotifyImage(func() {
 		if p := e.Thumbnail.Paintable(); p != nil {
-			e.SetSize(p.IntrinsicWidth(), p.IntrinsicHeight())
+			e.setSize(p.IntrinsicWidth(), p.IntrinsicHeight())
 			e.finishSetting()
 		}
 	})
@@ -317,10 +318,20 @@ func (e *Embed) SetName(name string) {
 	}
 }
 
+// URL returns the Embed's current URL.
+func (e *Embed) URL() string {
+	return e.url
+}
+
 // SetFromURL sets the URL of the thumbnail embed.
 func (e *Embed) SetFromURL(url string) {
 	e.url = url
 	e.Thumbnail.SetURL(url)
+}
+
+// NotifyImage calls f everytime the Embed thumbnail changes.
+func (e *Embed) NotifyImage(f func()) glib.SignalHandle {
+	return e.Thumbnail.NotifyProperty("paintable", f)
 }
 
 // undo effects
@@ -410,14 +421,31 @@ func (e *Embed) downloadVideo(vi *extraVideoEmbed) {
 		cleanup := func() { e.setBusy(false) }
 
 		ctx := vi.ctx.Take()
-		url := e.url
+
+		u, err := url.Parse(e.url)
+		if err != nil {
+			vi.progress.Error(errors.Wrap(err, "invalid URL"))
+			return
+		}
 
 		gtkutil.Async(ctx, func() func() {
-			cacheDir := app.FromContext(ctx).CachePath("videos")
-			cacheDst := urlPath(cacheDir, url)
+			var file string
 
-			if !fetchURL(ctx, url, cacheDst, vi.progress) {
-				return cleanup
+			switch u.Scheme {
+			case "http":
+				cacheDir := app.FromContext(ctx).CachePath("videos")
+				cacheDst := urlPath(cacheDir, u.String())
+				if !fetchURL(ctx, u.String(), cacheDst, vi.progress) {
+					return cleanup
+				}
+				file = cacheDst
+			case "file":
+				file = u.Host + u.Path
+			default:
+				return func() {
+					vi.progress.Error(fmt.Errorf("unknown scheme %q (go do the refactor!)", u.Scheme))
+					cleanup()
+				}
 			}
 
 			return func() {
@@ -426,7 +454,7 @@ func (e *Embed) downloadVideo(vi *extraVideoEmbed) {
 				// TODO: consider just using vi.media directly, since it's a
 				// Paintable, so we can just directly use it. Integrating it
 				// with onlineimage.Picture might be tricky, however.
-				vi.media = gtk.NewMediaFileForFilename(cacheDst)
+				vi.media = gtk.NewMediaFileForFilename(file)
 				vi.media.SetLoop(e.opts.Type.IsLooped())
 				vi.media.SetMuted(e.opts.Type.IsMuted())
 				vi.media.Play()
@@ -471,15 +499,18 @@ func (e *Embed) DownloadVideoOnClick() {
 	e.SetOpenURL(func() { e.downloadVideo(vi) })
 }
 
-// SetSize sets the size of the image embed.
-func (e *Embed) SetSize(w, h int) {
-	w, h = imgutil.MaxSize(w, h, e.maxSize[0], e.maxSize[1])
+// setSize sets the size of the image embed.
+func (e *Embed) setSize(w, h int) {
+	if e.maxSize != [2]int{} {
+		w, h = imgutil.MaxSize(w, h, e.maxSize[0], e.maxSize[1])
+	}
+
 	e.curSize = [2]int{w, h}
 	e.SetSizeRequest(w, h)
 }
 
-// Size returns the embed size, or 0 if no images have been fetched yet or if
-// SetSize has never been called before.
+// Size returns the original embed size optionally scaled down, or 0 if no
+// images have been fetched yet or if SetSize has never been called before.
 func (e *Embed) Size() (w, h int) {
 	return e.curSize[0], e.curSize[1]
 }

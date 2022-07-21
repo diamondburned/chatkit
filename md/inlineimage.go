@@ -6,11 +6,6 @@ import (
 	"github.com/diamondburned/gotkit/gtkutil/cssutil"
 )
 
-// inlineImageHeightOffset is kept in sync with the -0.35em subtraction above,
-// because GTK behaves weirdly with how the height is done. It only matters for
-// small inline images, though.
-const inlineImageHeightOffset = -4
-
 // InlineImage is an inline image. The actual widget type depends on the
 // constructor.
 type InlineImage struct {
@@ -25,7 +20,7 @@ func (i *InlineImage) SetSizeRequest(w, h int) {
 
 var inlineImageCSS = cssutil.Applier("md-inlineimage", `
 	.md-inlineimage {
-		margin-bottom: -0.45em;
+		/*margin-bottom: -0.45em;*/
 	}
 `)
 
