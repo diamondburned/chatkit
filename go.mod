@@ -4,8 +4,8 @@ go 1.17
 
 require (
 	github.com/alecthomas/chroma v0.10.0
-	github.com/diamondburned/gotk4/pkg v0.0.0-20220417091308-856167c02355
-	github.com/diamondburned/gotkit v0.0.0-20220701031318-510b7c374877
+	github.com/diamondburned/gotk4/pkg v0.0.0-20220723075038-d39dfb3fc2ed
+	github.com/diamondburned/gotkit v0.0.0-20220723081049-c6780e784cab
 	github.com/dustin/go-humanize v1.0.0
 	github.com/pkg/errors v0.9.1
 	github.com/yuin/goldmark v1.4.11

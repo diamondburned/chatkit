@@ -317,7 +317,11 @@ func (a *Autocompleter) show() {
 		rect := a.tview.IterLocation(a.start)
 		x, y := a.tview.BufferToWindowCoords(gtk.TextWindowWidget, rect.X(), rect.Y())
 
-		ptTo := gdk.NewRectangle(x, y, 1, 1)
+		var ptTo gdk.Rectangle
+		ptTo.SetX(x)
+		ptTo.SetY(y)
+		ptTo.SetWidth(1)
+		ptTo.SetHeight(1)
 		a.popover.SetPointingTo(&ptTo)
 		a.popover.Popup()
 	}
