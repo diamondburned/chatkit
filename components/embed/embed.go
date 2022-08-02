@@ -432,7 +432,7 @@ func (e *Embed) downloadVideo(vi *extraVideoEmbed) {
 			var file string
 
 			switch u.Scheme {
-			case "http":
+			case "http", "https":
 				cacheDir := app.FromContext(ctx).CachePath("videos")
 				cacheDst := urlPath(cacheDir, u.String())
 				if !fetchURL(ctx, u.String(), cacheDst, vi.progress) {
