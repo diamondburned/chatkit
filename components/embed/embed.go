@@ -499,6 +499,15 @@ func (e *Embed) DownloadVideoOnClick() {
 	e.SetOpenURL(func() { e.downloadVideo(vi) })
 }
 
+// SetSizeRequest sets the minimum size of a widget. The dimensions are clamped
+// to the maximum size given during construction, if any.
+func (e *Embed) SetSizeRequest(w, h int) {
+	if e.maxSize != [2]int{} {
+		w, h = imgutil.MaxSize(w, h, e.maxSize[0], e.maxSize[1])
+	}
+	e.Frame.SetSizeRequest(w, h)
+}
+
 // setSize sets the size of the image embed.
 func (e *Embed) setSize(w, h int) {
 	if e.maxSize != [2]int{} {
@@ -506,7 +515,7 @@ func (e *Embed) setSize(w, h int) {
 	}
 
 	e.curSize = [2]int{w, h}
-	e.SetSizeRequest(w, h)
+	e.Frame.SetSizeRequest(w, h)
 }
 
 // Size returns the original embed size optionally scaled down, or 0 if no
