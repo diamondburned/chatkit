@@ -236,7 +236,7 @@ func New(ctx context.Context, maxW, maxH int, opts Opts) *Embed {
 
 			play := gtk.NewImageFromIconName("media-playback-start-symbolic")
 			play.AddCSSClass("thumbnail-embed-play")
-			play.SetIconSize(gtk.IconSizeLarge)
+			play.SetIconSize(gtk.IconSizeNormal)
 			play.SetHAlign(gtk.AlignCenter)
 
 			progress := progress.NewBar()
