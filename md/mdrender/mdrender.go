@@ -2,6 +2,7 @@ package mdrender
 
 import (
 	"strconv"
+	"strings"
 
 	"github.com/diamondburned/chatkit/md/block"
 	"github.com/yuin/goldmark/ast"
@@ -243,6 +244,12 @@ func (r *Renderer) InsertSegments(text *block.TextBlock, segs *text.Segments) {
 		// Also, At() returns a value but Value() has a pointer receiver. That's
 		// just really dumb.
 		seg := segs.At(i)
-		text.Insert(string(seg.Value(r.src)))
+
+		value := string(seg.Value(r.src))
+		// Replace CRLF to LF, just in case the messages contain this. This will
+		// screw up syntax highlighting alignment.
+		value = strings.ReplaceAll(value, "\r\n", "\n")
+
+		text.Insert(value)
 	}
 }

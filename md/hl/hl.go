@@ -185,7 +185,7 @@ func Highlight(ctx context.Context, start, end *gtk.TextIter, language string) {
 
 	f := newFormatter(ctx, buf, start, end, language)
 	f.resetTags()
-	f.do(i)
+	f.do(i, txt)
 	f.discard()
 
 	end.SetOffset(endOffset)
@@ -287,7 +287,7 @@ func (f *formatter) resetTags() {
 	}
 }
 
-func (f *formatter) do(iter chroma.Iterator) {
+func (f *formatter) do(iter chroma.Iterator, _ string) {
 	offset := f.start.Offset()
 
 	for _, token := range iter.Tokens() {
