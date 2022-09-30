@@ -182,6 +182,11 @@ func (a *Autocompleter) Unpause() {
 	a.paused = false
 }
 
+// SetPopoverWidth sets the width of the popover. The default width is 250px.
+func (a *Autocompleter) SetPopoverWidth(width int) {
+	a.popover.SetSizeRequest(width, -1)
+}
+
 // SetMinLength sets the minimum number of characters before the autocompleter
 // kicks in.
 func (a *Autocompleter) SetMinLength(minLength int) {
