@@ -12,6 +12,13 @@ import (
 	"github.com/diamondburned/gotkit/gtkutil/cssutil"
 )
 
+type ctxKey uint
+
+const (
+	_ ctxKey = iota
+	iterDataCtx
+)
+
 // Searcher is the interface for anything that can handle searching up a
 // particular entity, such as a room member.
 type Searcher interface {
@@ -20,6 +27,23 @@ type Searcher interface {
 	// Search searches the given string and returns a list of data. The returned
 	// list of Data only needs to be valid until the next call of Search.
 	Search(ctx context.Context, str string) []Data
+}
+
+// IterData contains iterator data that's given to Searcher.Search's context.
+// Use IterDataFromContext to get it.
+type IterData struct {
+	Start *gtk.TextIter
+	End   *gtk.TextIter
+}
+
+// IterDataFromContext returns the IterData from the given context. If the
+// context does not contain any IterData, then it panics.
+func IterDataFromContext(ctx context.Context) *IterData {
+	data, _ := ctx.Value(iterDataCtx).(*IterData)
+	if data == nil {
+		panic("no iter data in context")
+	}
+	return data
 }
 
 // Data represents a data structure capable of being displayed inside a list by
@@ -67,6 +91,7 @@ type Autocompleter struct {
 	timeout        time.Duration
 	poppedUp       bool
 	cancelOnChange bool
+	paused         bool
 }
 
 type row struct {
@@ -145,6 +170,18 @@ func New(ctx context.Context, text *gtk.TextView, f SelectedFunc) *Autocompleter
 	return &ac
 }
 
+// Pause pauses the autocompleter. The popover is hidden if it's currently being
+// shown.
+func (a *Autocompleter) Pause() {
+	a.paused = true
+	a.Clear()
+}
+
+// Unpause unpauses the autocompleter.
+func (a *Autocompleter) Unpause() {
+	a.paused = false
+}
+
 // SetMinLength sets the minimum number of characters before the autocompleter
 // kicks in.
 func (a *Autocompleter) SetMinLength(minLength int) {
@@ -170,11 +207,6 @@ func (a *Autocompleter) Use(searchers ...Searcher) {
 	}
 }
 
-func popRune(s string) (rune, string) {
-	r, sz := utf8.DecodeRuneInString(s)
-	return r, s[sz:]
-}
-
 // Autocomplete updates the Autocompleter popover to show what the internal
 // input buffer has.
 func (a *Autocompleter) Autocomplete() {
@@ -184,6 +216,11 @@ func (a *Autocompleter) Autocomplete() {
 	}
 
 	a.clear()
+
+	if a.paused {
+		a.hide()
+		return
+	}
 
 	cursor := a.buffer.ObjectProperty("cursor-position").(int)
 
@@ -232,6 +269,12 @@ func (a *Autocompleter) Autocomplete() {
 	if a.cancelOnChange {
 		ctx, a.cancel = context.WithCancel(a.parent)
 	}
+
+	// Inject iter data.
+	ctx = context.WithValue(ctx, iterDataCtx, &IterData{
+		Start: a.start,
+		End:   a.end,
+	})
 
 	searchCtx, cancel := context.WithTimeout(ctx, a.timeout)
 	defer cancel()
