@@ -2,6 +2,7 @@ package autocomplete
 
 import (
 	"context"
+	"log"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -19,10 +20,15 @@ const (
 	iterDataCtx
 )
 
+// WhitespaceRune is a special rune that Searcher can return to indicate that it
+// should be activated on every word.
+const WhitespaceRune rune = ' '
+
 // Searcher is the interface for anything that can handle searching up a
 // particular entity, such as a room member.
 type Searcher interface {
-	// Rune is the triggering rune for this searcher.
+	// Rune is the triggering rune for this searcher. If ' ' is returned, then
+	// the searcher is always invoked on a complete word.
 	Rune() rune
 	// Search searches the given string and returns a list of data. The returned
 	// list of Data only needs to be valid until the next call of Search.
@@ -77,7 +83,7 @@ type Autocompleter struct {
 	start *gtk.TextIter
 	end   *gtk.TextIter
 
-	onSelect SelectedFunc
+	onSelects []SelectedFunc
 
 	popover  *gtk.Popover
 	listBox  *gtk.ListBox
@@ -118,7 +124,7 @@ const AutocompleterWidth = 250
 const MaxResults = 8
 
 // New creates a new instance of autocompleter.
-func New(ctx context.Context, text *gtk.TextView, f SelectedFunc) *Autocompleter {
+func New(ctx context.Context, text *gtk.TextView) *Autocompleter {
 	list := gtk.NewListBox()
 	list.AddCSSClass("autocomplete-list")
 	list.SetActivateOnSingleClick(true)
@@ -149,11 +155,11 @@ func New(ctx context.Context, text *gtk.TextView, f SelectedFunc) *Autocompleter
 		parent:    ctx,
 		tview:     text,
 		buffer:    text.Buffer(),
-		onSelect:  f,
 		popover:   popover,
 		listBox:   list,
 		listRows:  make([]row, 0, MaxResults),
 		searchers: make(map[rune]Searcher),
+		onSelects: make([]SelectedFunc, 0, 1),
 	}
 
 	text.ConnectUnmap(func() {
@@ -205,10 +211,30 @@ func (a *Autocompleter) SetTimeout(d time.Duration) {
 	a.timeout = d
 }
 
+// AddSelectedFunc adds a callback that is called when the user has selected an
+// entry inside the autocompleter.
+func (a *Autocompleter) AddSelectedFunc(selectedFunc SelectedFunc) {
+	a.onSelects = append(a.onSelects, selectedFunc)
+}
+
 // Use registers the given searcher instance into the autocompleter.
 func (a *Autocompleter) Use(searchers ...Searcher) {
 	for _, s := range searchers {
+		if _, ok := a.searchers[s.Rune()]; ok {
+			log.Panicf("autocompleter: duplicate rune %q for searcher %T", s.Rune(), s)
+		}
 		a.searchers[s.Rune()] = s
+	}
+}
+
+// Unuse removes the given searcher instance from the autocompleter using the
+// given identifying rune.
+func (a *Autocompleter) Unuse(searcher Searcher) {
+	for r, s := range a.searchers {
+		if s == searcher && r == searcher.Rune() {
+			delete(a.searchers, r)
+			return
+		}
 	}
 }
 
@@ -237,6 +263,10 @@ func (a *Autocompleter) Autocomplete() {
 	if !a.start.BackwardFindChar(func(ch uint32) bool {
 		r := rune(ch)
 		if unicode.IsSpace(r) {
+			// If we stumbled upon a space character, then we haven't found
+			// anything yet inside a.searchers that resembles a non-whitespace
+			// rune, so we just grab one here.
+			searcher = a.searchers[WhitespaceRune]
 			return true // stop scanning
 		}
 
@@ -244,8 +274,14 @@ func (a *Autocompleter) Autocomplete() {
 		searcher, ok = a.searchers[r]
 		return ok
 	}, nil) || searcher == nil {
-		a.hide()
-		return
+		// If we haven't managed to find anything and we're at the start of the
+		// line, then we probably want to use the WhitespaceRune as well.
+		if whitespaceSearcher, ok := a.searchers[WhitespaceRune]; ok {
+			searcher = whitespaceSearcher
+		} else {
+			a.hide()
+			return
+		}
 	}
 
 	// Remove the prefix.
@@ -331,10 +367,12 @@ func (a *Autocompleter) selectRow(row *gtk.ListBoxRow) {
 		Data:   a.listRows[row.Index()].data,
 	}
 
-	if a.onSelect(data) {
-		a.buffer.Insert(data.Bounds[1], " ")
-		a.Clear()
-		return
+	for _, onSelect := range a.onSelects {
+		if onSelect(data) {
+			a.buffer.Insert(data.Bounds[1], " ")
+			a.Clear()
+			return
+		}
 	}
 }
 
