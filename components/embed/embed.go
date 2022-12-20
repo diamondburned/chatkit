@@ -90,10 +90,9 @@ type Opts struct {
 //
 // Widget hierarchy:
 //
-//    - Widgetter (?)
-//      - Button
-//        - Thumbnail
-//
+//   - Widgetter (?)
+//   - Button
+//   - Thumbnail
 type Embed struct {
 	*gtk.Frame
 	Button    *gtk.Button
@@ -408,6 +407,17 @@ func (e *Embed) downloadVideo(vi *extraVideoEmbed) {
 		vi.video = gtk.NewVideo()
 		vi.video.AddCSSClass("thumbnail-embed-video")
 		vi.video.SetLoop(e.opts.Type.IsLooped())
+
+		var handle glib.SignalHandle
+		handle = e.ConnectUnmap(func() {
+			e.HandlerDisconnect(handle)
+
+			media := gtk.BaseMediaStream(vi.video.MediaStream())
+			media.Ended()
+
+			vi.video.Unparent()
+			vi.video = nil
+		})
 	}
 
 	if !e.isBusy() && vi.media == nil {
@@ -497,6 +507,18 @@ func (e *Embed) DownloadVideoOnClick() {
 	}
 
 	e.SetOpenURL(func() { e.downloadVideo(vi) })
+}
+
+// SetMaxSize sets the maximum size of the image.
+func (e *Embed) SetMaxSize(w, h int) {
+	e.maxSize = [2]int{w, h}
+}
+
+// ShrinkMaxSize sets the maximum size of the image to be the smaller of the
+// current maximum size and the given size.
+func (e *Embed) ShrinkMaxSize(w, h int) {
+	w, h = imgutil.MaxSize(w, h, e.maxSize[0], e.maxSize[1])
+	e.SetMaxSize(w, h)
 }
 
 // SetSizeRequest sets the minimum size of a widget. The dimensions are clamped
