@@ -144,6 +144,7 @@ var embedCSS = cssutil.Applier("thumbnail-embed", `
 	}
 	.thumbnail-embed .thumbnail-embed-image {
 		background-color: black;
+		border-radius: inherit;
 		transition: linear 50ms filter;
 	}
 	.thumbnail-embed-errorlabel {
@@ -210,7 +211,6 @@ func New(ctx context.Context, maxW, maxH int, opts Opts) *Embed {
 
 	e.Frame = gtk.NewFrame("")
 	e.Frame.SetOverflow(gtk.OverflowHidden)
-	e.Frame.SetHAlign(gtk.AlignStart)
 	e.Frame.SetChild(e.Button)
 	embedCSS(e)
 
@@ -306,6 +306,12 @@ func New(ctx context.Context, maxW, maxH int, opts Opts) *Embed {
 
 	e.SetOpenURL(e.ActivateDefault)
 	return e
+}
+
+// SetHAlign sets the horizontal alignment of the embed relative to its parent.
+func (e *Embed) SetHAlign(align gtk.Align) {
+	e.Frame.SetHAlign(align)
+	e.Button.SetHAlign(align)
 }
 
 // SetName sets the given embed name into everything that's displaying the embed
