@@ -418,10 +418,11 @@ func (e *Embed) downloadVideo(vi *extraVideoEmbed) {
 		handle = e.ConnectUnmap(func() {
 			e.HandlerDisconnect(handle)
 
-			media := gtk.BaseMediaStream(vi.video.MediaStream())
-			media.Ended()
+			if vi.media != nil {
+				vi.media.Ended()
+				vi.video.Unparent()
+			}
 
-			vi.video.Unparent()
 			vi.video = nil
 		})
 	}
