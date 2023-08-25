@@ -9,11 +9,11 @@ import (
 var Tags = textutil.TextTagsMap{
 	// https://www.w3schools.com/cssref/css_default_values.asp
 	"h1":     HTag(1.35),
-	"h2":     HTag(1.20),
-	"h3":     HTag(1.10),
-	"h4":     HTag(1.00),
-	"h5":     HTag(0.90),
-	"h6":     HTag(0.83),
+	"h2":     HTag(1.18),
+	"h3":     HTag(1.00),
+	"h4":     HTag(0.91),
+	"h5":     HTag(0.83),
+	"h6":     HTag(0.75),
 	"em":     {"style": pango.StyleItalic},
 	"i":      {"style": pango.StyleItalic},
 	"strong": {"weight": pango.WeightBold},
@@ -32,9 +32,9 @@ var Tags = textutil.TextTagsMap{
 		"style":  pango.StyleItalic,
 		"scale":  0.8,
 	},
-	"li": {
-		"left-margin": 24, // px
-	},
+	// "li": {
+	// 	"left-margin": 24, // px
+	// },
 	"blockquote": {
 		"foreground":  "#789922",
 		"left-margin": 12, // px
