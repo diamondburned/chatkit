@@ -41,6 +41,8 @@ type Renderer struct {
 	renderers map[ast.NodeKind]RendererFunc
 	fallbackR RendererFunc
 	src       []byte
+
+	listIx *int
 }
 
 // NewRenderer creates a new renderer.
@@ -194,6 +196,34 @@ func (r *Renderer) RenderOnce(n ast.Node) ast.WalkStatus {
 
 		text.ApplyLink(string(n.URL(r.src)), start, end)
 		return ast.WalkContinue
+
+	case *ast.List:
+		listRenderer := *r
+		if n.IsOrdered() {
+			start := n.Start
+			listRenderer.listIx = &start
+		} else {
+			listRenderer.listIx = nil
+		}
+
+		listRenderer.RenderChildren(n)
+		return ast.WalkSkipChildren
+
+	case *ast.ListItem:
+		// Ensure the ListItemBlock is never reused for other nodes.
+		defer r.State.FinalizeBlock()
+
+		listItem := block.NewListItemBlock(r.State, r.listIx, n.Offset)
+		r.State.Append(listItem)
+
+		// TODO: prevent children from having block-level elements.
+		r.RenderChildren(n)
+
+		if r.listIx != nil {
+			*r.listIx++
+		}
+
+		return ast.WalkSkipChildren
 
 	case *ast.Paragraph:
 		// Fix stupid assumptions about HTML.
