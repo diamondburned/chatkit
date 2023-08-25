@@ -8,12 +8,12 @@ import (
 // Tags contains the tag table mapping most Matrix HTML tags to GTK TextTags.
 var Tags = textutil.TextTagsMap{
 	// https://www.w3schools.com/cssref/css_default_values.asp
-	"h1":     htag(1.75),
-	"h2":     htag(1.50),
-	"h3":     htag(1.17),
-	"h4":     htag(1.00),
-	"h5":     htag(0.83),
-	"h6":     htag(0.67),
+	"h1":     HTag(1.35),
+	"h2":     HTag(1.20),
+	"h3":     HTag(1.10),
+	"h4":     HTag(1.00),
+	"h5":     HTag(0.90),
+	"h6":     HTag(0.83),
 	"em":     {"style": pango.StyleItalic},
 	"i":      {"style": pango.StyleItalic},
 	"strong": {"weight": pango.WeightBold},
@@ -54,7 +54,8 @@ var Tags = textutil.TextTagsMap{
 	"_nohyphens": {"insert-hyphens": false},
 }
 
-func htag(scale float64) textutil.TextTag {
+// HTag creates a new TextTag for the heading with the given scale.
+func HTag(scale float64) textutil.TextTag {
 	return textutil.TextTag{
 		"scale":  scale,
 		"weight": pango.WeightBold,
