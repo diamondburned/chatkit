@@ -134,9 +134,9 @@ func (r *Renderer) RenderOnce(n ast.Node) ast.WalkStatus {
 
 		switch {
 		case n.HardLineBreak():
-			text.EndLine(2)
+			text.InsertNewLines(2)
 		case n.SoftLineBreak():
-			text.EndLine(1)
+			text.InsertNewLines(1)
 		}
 
 	case *ast.Emphasis:
@@ -155,6 +155,8 @@ func (r *Renderer) RenderOnce(n ast.Node) ast.WalkStatus {
 	case *ast.Heading:
 		// h1 ~ h6
 		if n.Level >= 1 && n.Level <= 6 {
+			text := r.State.TextBlock()
+			text.EndLine(2)
 			return r.RenderChildrenWithTag(n, "h"+strconv.Itoa(n.Level))
 		}
 
