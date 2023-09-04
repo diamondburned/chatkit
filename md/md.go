@@ -128,6 +128,13 @@ var EmojiRanges = [][2]rune{
 	{0x1F1E6, 0x1F1FF}, // Flags
 }
 
+var whitespaces = [255]bool{
+	' ':  true,
+	'\t': true,
+	'\n': true,
+	'\r': true,
+}
+
 // IsUnicodeEmoji returns true if the given string only contains a Unicode
 // emoji.
 func IsUnicodeEmoji(v string) bool {
@@ -141,6 +148,8 @@ runeLoop:
 					continue runeLoop
 				}
 			}
+		} else if whitespaces[r] {
+			continue
 		}
 		// runeLoop not hit; bail.
 		return false
