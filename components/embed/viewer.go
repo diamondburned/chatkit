@@ -1,79 +1,140 @@
-package embed
+package message
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"math"
+	"net/http"
+	"net/url"
+	"os"
+	"path"
 
-	"github.com/diamondburned/gotk4/pkg/core/glib"
+	"github.com/diamondburned/chatkit/components/embed"
+	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
 	"github.com/diamondburned/gotk4/pkg/gdk/v4"
+	"github.com/diamondburned/gotk4/pkg/gio/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 	"github.com/diamondburned/gotkit/app"
 	"github.com/diamondburned/gotkit/gtkutil"
 	"github.com/diamondburned/gotkit/gtkutil/imgutil"
 )
 
+// TODO: In libadwaita 1.4 replace BackButton with `set_show_back_button“
 type Viewer struct {
-	*gtk.Dialog
-	Scroll *gtk.ScrolledWindow
-	Embed  *Embed
-	Button ViewerButtons
+	*adw.Window
 
-	extra viewerExtra
+	Header       *adw.HeaderBar
+	ToastOverlay *adw.ToastOverlay
+	Overlay      *gtk.Overlay
+	Scroll       *gtk.ScrolledWindow
+	Embed        *embed.Embed
+
+	BackButton    *gtk.Button
+	ControlsStart ControlsBoxStart
+	ControlsEnd   ControlsBoxEnd
+
 	vadj  *gtk.Adjustment
 	hadj  *gtk.Adjustment
+
+	zoom float64
+	filename string
 
 	ctx context.Context
 }
 
-type ViewerButtons struct {
-	Back         *gtk.Button
+type ControlsBoxStart struct {
+	*gtk.Box
+
 	Download     *gtk.Button
 	CopyURL      *gtk.Button
 	OpenOriginal *gtk.Button
 }
 
-type viewerExtra interface {
-	viewerExtra()
+type ControlsBoxEnd struct {
+	*gtk.Box
 }
 
-type viewerExtraImage struct {
-	fixed *gtk.Fixed
-	scale float64
-}
+var ControlsStyles = []string{"osd", "circular"}
 
-func (viewerExtraImage) viewerExtra() {}
-
-func NewViewer(ctx context.Context, opts Opts) *Viewer {
+// NewViewer creates a new instance of Viewer window, representing an image viewer.
+func NewViewer(ctx context.Context, uri string, opts embed.Opts) (*Viewer, error) {
 	v := Viewer{ctx: ctx}
-	v.Embed = New(ctx, 0, 0, opts)
+	v.Embed = embed.New(ctx, 0, 0, opts)
+	v.Embed.SetFromURL(uri)
+
+	v.ToastOverlay = adw.NewToastOverlay()
+
+	v.Overlay = gtk.NewOverlay()
+
+	v.ToastOverlay.SetChild(v.Overlay)
 
 	v.Scroll = gtk.NewScrolledWindow()
 	v.Scroll.SetVExpand(true)
 	v.Scroll.SetHExpand(true)
 
+	v.Overlay.SetChild(v.Scroll)
+
+	v.zoom = 1.0
+
 	v.vadj = v.Scroll.VAdjustment()
 	v.hadj = v.Scroll.HAdjustment()
 
-	v.Dialog = gtk.NewDialogWithFlags(
-		app.FromContext(ctx).SuffixedTitle("Preview"),
-		app.GTKWindowFromContext(ctx),
-		gtk.DialogModal|gtk.DialogUseHeaderBar|gtk.DialogDestroyWithParent)
-	v.Dialog.SetDefaultSize(400, 400)
-	v.Dialog.SetChild(v.Scroll)
+	v.Window = adw.NewWindow()
+	v.SetSizeRequest(360, 360)
+	v.SetTransientFor(app.GTKWindowFromContext(ctx))
+	v.SetModal(true)
 
-	v.Button = ViewerButtons{
-		Back:         newActionButton(v, "Back", "go-previous-symbolic", "embedviewer.close"),
-		Download:     newActionButton(v, "Download", "folder-download-symbolic", "embedviewer.download"),
-		CopyURL:      newActionButton(v, "Copy URL", "edit-copy-symbolic", "embedviewer.copy-url"),
-		OpenOriginal: newActionButton(v, "Open Original", "text-html-symbolic", "embedviewer.open-original"),
+	url, err := url.Parse(v.Embed.URL())
+	if err != nil {
+		fmt.Printf("Invalid raw URI structure: %s\n", url)
+		return nil, err
+	}
+	v.filename = path.Base(url.Path)
+
+	v.BackButton = newActionButton(v, "Back", "go-previous-symbolic", "embedviewer.close", nil)
+
+	v.Header = adw.NewHeaderBar()
+	v.Header.SetShowEndTitleButtons(false)
+	v.Header.SetShowStartTitleButtons(false)
+	v.Header.SetCenteringPolicy(adw.CenteringPolicyStrict)
+	v.Header.SetTitleWidget(adw.NewWindowTitle(v.filename, ""))
+
+	v.SetShowBackButton(true)
+
+	v.ControlsStart = ControlsBoxStart{
+		Box:          gtk.NewBox(gtk.OrientationHorizontal, 6),
+		Download:     newActionButton(v, "Download", "folder-download-symbolic", "embedviewer.download", ControlsStyles),
+		CopyURL:      newActionButton(v, "Copy URL", "edit-copy-symbolic", "embedviewer.copy-url", ControlsStyles),
+		OpenOriginal: newActionButton(v, "Open Original", "earth-symbolic", "embedviewer.open-original", ControlsStyles),
 	}
 
-	header := v.Dialog.HeaderBar()
-	header.SetShowTitleButtons(false)
-	header.PackStart(v.Button.Back)
-	header.PackEnd(v.Button.CopyURL)
-	header.PackEnd(v.Button.Download)
-	header.PackEnd(v.Button.OpenOriginal)
+	v.ControlsStart.SetMarginBottom(18)
+	v.ControlsStart.SetMarginStart(18)
+	v.ControlsStart.SetHAlign(gtk.AlignStart)
+	v.ControlsStart.SetVAlign(gtk.AlignEnd)
+
+	v.ControlsStart.Append(v.ControlsStart.OpenOriginal)
+	v.ControlsStart.Append(v.ControlsStart.Download)
+	v.ControlsStart.Append(v.ControlsStart.CopyURL)
+
+	v.ControlsEnd = ControlsBoxEnd{
+		Box: gtk.NewBox(gtk.OrientationHorizontal, 6),
+	}
+
+	v.ControlsEnd.SetMarginBottom(18)
+	v.ControlsEnd.SetMarginStart(18)
+	v.ControlsEnd.SetHAlign(gtk.AlignEnd)
+	v.ControlsEnd.SetVAlign(gtk.AlignEnd)
+
+	v.Overlay.AddOverlay(v.ControlsStart)
+	v.Overlay.AddOverlay(v.ControlsEnd)
+
+	box := gtk.NewBox(gtk.OrientationVertical, 0)
+	box.Append(v.Header)
+	box.Append(v.ToastOverlay)
+
+	v.SetContent(box)
 
 	gtkutil.BindActionMap(v, map[string]func(){
 		"embedviewer.close":         v.close,
@@ -83,57 +144,22 @@ func NewViewer(ctx context.Context, opts Opts) *Viewer {
 	})
 
 	switch opts.Type {
-	case EmbedTypeImage, EmbedTypeGIF:
-		// Allow pinch-to-zoom, since we have no video player UI.
-		fixed := gtk.NewFixed()
-		fixed.SetVAlign(gtk.AlignCenter)
-		fixed.SetHAlign(gtk.AlignCenter)
-		fixed.Put(v.Embed, 0, 0)
+	case embed.EmbedTypeImage, embed.EmbedTypeGIF:
+		v.Embed.SetHExpand(true)
+		v.Embed.SetVExpand(true)
 
-		v.Scroll.SetChild(fixed)
+		// Keep original size of the image when resizing window
+		v.Embed.SetVAlign(gtk.AlignCenter)
+		v.Embed.SetHAlign(gtk.AlignCenter)
+
+		v.Scroll.SetChild(v.Embed)
 		v.Scroll.SetPolicy(gtk.PolicyAutomatic, gtk.PolicyAutomatic)
-
-		v.extra = &viewerExtraImage{
-			fixed: fixed,
-			scale: 1.0,
-		}
 
 		// Disable click-to-open so we can handle panning.
 		v.Embed.SetOpenURL(nil)
 		v.Embed.NotifyImage(func() {
 			v.scaleFit()
 		})
-
-		var mouseX, mouseY float64
-
-		motionCtrl := gtk.NewEventControllerMotion()
-		motionCtrl.ConnectMotion(func(x, y float64) {
-			mouseX = x
-			mouseY = y
-		})
-
-		scrollCtrl := gtk.NewEventControllerScroll(gtk.EventControllerScrollVertical)
-		scrollCtrl.SetPropagationPhase(gtk.PhaseCapture)
-		scrollCtrl.ConnectScroll(func(_, dy float64) bool {
-			mod := scrollCtrl.CurrentEventState()
-			if (mod & gdk.ControlMask) != 0 {
-				// One discrete scroll up is -1.0, and we want to scale maybe
-				// 1.1x in, so we scale the value.
-				if dy > 0 {
-					// scroll down
-					v.scale(dy*+(1-0.1), mouseX, mouseY)
-				} else {
-					// scroll up
-					v.scale(dy*-(1+0.1), mouseX, mouseY)
-				}
-
-				return true
-			}
-			return false
-		})
-
-		// Treat this specially, otherwise Scroll will eat up the events.
-		v.AddController(scrollCtrl)
 
 		// Keep track of the scroll begin coordinates so we can get the offset
 		// properly.
@@ -150,10 +176,8 @@ func NewViewer(ctx context.Context, opts Opts) *Viewer {
 		})
 
 		v.Scroll.AddController(dragCtrl)
-		v.Scroll.SetChild(fixed)
 
-	case EmbedTypeGIFV, EmbedTypeVideo:
-		// Don't allow pinch-to-zoom, but at least fill the embed.
+	case embed.EmbedTypeGIFV, embed.EmbedTypeVideo:
 		v.Embed.SetVExpand(true)
 		v.Embed.SetHExpand(true)
 		v.Embed.SetVAlign(gtk.AlignFill)
@@ -162,38 +186,109 @@ func NewViewer(ctx context.Context, opts Opts) *Viewer {
 		v.Scroll.SetChild(v.Embed)
 		v.Scroll.SetPolicy(gtk.PolicyNever, gtk.PolicyNever)
 	default:
-		panic("unsupported embed type")
+		err := fmt.Errorf("unsupported embed type: %#v", opts.Type)
+		return nil, err
 	}
 
-	return &v
+	return &v, nil
 }
 
-func newActionButton(target gtk.Widgetter, text, icon, action string) *gtk.Button {
+func newActionButton(target gtk.Widgetter, text, icon, action string, styles []string) *gtk.Button {
 	button := gtk.NewButtonFromIconName(icon)
-	button.AddCSSClass(icon)
 	button.SetTooltipText(text)
+
+	if styles != nil {
+		button.SetCSSClasses(styles)
+	}
+
 	button.ConnectClicked(func() {
 		base := gtk.BaseWidget(target)
 		base.ActivateAction(action, nil)
 	})
+
 	return button
 }
 
-// AddButton adds a header button into the Viewer.
-func (v *Viewer) AddButton(pack gtk.PositionType, button *gtk.Button) {
-	header := v.Dialog.HeaderBar()
+// SetShowBackButton sets whether to show back button at the start of headerbar.
+func (v *Viewer) SetShowBackButton(show bool) {
+	if !show {
+		v.Header.Remove(v.BackButton)
+	}
+
+	v.Header.PackStart(v.BackButton)
+}
+
+// AddStartButton adds a button into the ControlsBoxStart.
+func (cs *ControlsBoxStart) AddStartButton(pack gtk.PositionType, button *gtk.Button) {
 	switch pack {
 	case gtk.PosTop, gtk.PosLeft:
-		header.PackStart(button)
+		cs.Prepend(button)
 	case gtk.PosBottom, gtk.PosRight:
-		header.PackEnd(button)
+		cs.Append(button)
 	}
 }
 
-func (v *Viewer) close() { v.Dialog.Close() }
+// AddEndButton adds a button into the ControlsBoxEnd.
+func (ce *ControlsBoxEnd) AddEndButton(pack gtk.PositionType, button *gtk.Button) {
+	switch pack {
+	case gtk.PosTop, gtk.PosLeft:
+		ce.Prepend(button)
+	case gtk.PosBottom, gtk.PosRight:
+		ce.Append(button)
+	}
+}
+
+func (v *Viewer) close() {
+	v.Close()
+}
 
 func (v *Viewer) download() {
+	chooser := gtk.NewFileChooserNative(
+		"",
+		app.GTKWindowFromContext(v.ctx),
+		gtk.FileChooserActionSave,
+		"Save", "Cancel",
+	)
+	chooser.SetModal(true)
+	chooser.SetCurrentName(v.filename)
 
+	chooser.ConnectResponse(func(resp int) {
+		if resp == int(gtk.ResponseAccept) {
+			file := chooser.File()
+			v.saveToFile(file, v.Embed.URL())
+		}
+	})
+
+	chooser.Show()
+}
+
+func (v *Viewer) saveToFile(file *gio.File, pictureURL string) {
+	outPath := file.Path()
+
+	response, err := http.Get(pictureURL)
+	if err != nil {
+		v.ToastOverlay.AddToast(adw.NewToast("An error occured while downloading picture data"))
+		fmt.Println("An error occured while downloading picture data:", err)
+		return
+	}
+	defer response.Body.Close()
+
+	out, err := os.Create(outPath)
+	if err != nil {
+		v.ToastOverlay.AddToast(adw.NewToast("An I/O error occurred while creating the output file"))
+		fmt.Println("An I/O error occurred while creating the output file:", err)
+		return
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, response.Body)
+	if err != nil {
+		v.ToastOverlay.AddToast(adw.NewToast("An I/O error occurred while saving the file"))
+		fmt.Println("An I/O error occurred while saving the file:", err)
+		return
+	}
+
+	v.ToastOverlay.AddToast(adw.NewToast("Picture saved successfully"))
 }
 
 func (v *Viewer) copyURL() {
@@ -204,16 +299,7 @@ func (v *Viewer) copyURL() {
 	clipboard := display.Clipboard()
 	clipboard.SetText(url)
 
-	popover := gtk.NewPopover()
-	popover.SetParent(v.Button.CopyURL)
-	popover.SetPosition(gtk.PosBottom)
-	popover.SetChild(gtk.NewLabel("Copied URL!"))
-	popover.Popup()
-
-	glib.TimeoutSecondsAdd(3, func() {
-		popover.Popdown()
-		glib.TimeoutSecondsAdd(3, popover.Unparent)
-	})
+	v.ToastOverlay.AddToast(adw.NewToast("Copied URL!"))
 }
 
 func (v *Viewer) openOriginal() {
@@ -221,11 +307,6 @@ func (v *Viewer) openOriginal() {
 }
 
 func (v *Viewer) scaleFit() {
-	extra, ok := v.extra.(*viewerExtraImage)
-	if !ok {
-		return
-	}
-
 	viewportAlloc := v.Scroll.Allocation()
 
 	vpw := viewportAlloc.Width()
@@ -240,66 +321,5 @@ func (v *Viewer) scaleFit() {
 	// get the smallest one.
 	wscale := float64(vpw) / float64(w)
 	hscale := float64(vph) / float64(h)
-	extra.scale = math.Min(wscale, hscale)
-
-	// Recenter the image.
-	posX, posY := imageOrigin(
-		float64(newW),
-		float64(newH),
-		float64(vpw),
-		float64(vph))
-	extra.fixed.Move(v.Embed, posX, posY)
-}
-
-func (v *Viewer) scale(mult, originX, originY float64) {
-	extra, ok := v.extra.(*viewerExtraImage)
-	if !ok {
-		return
-	}
-
-	wInt, hInt := v.Embed.Size()
-	if wInt == 0 || hInt == 0 {
-		return
-	}
-
-	w := float64(wInt)
-	h := float64(hInt)
-
-	extra.scale *= float64(mult)
-	w *= extra.scale
-	h *= extra.scale
-
-	v.Embed.SetSizeRequest(round(w), round(h))
-
-	// // Calculate the new scroll values. We do this by taking the origin and
-	// // multiplying it by the same scaling offset.
-	// scrollX := v.hadj.Value() * extra.scale
-	// scrollY := v.vadj.Value() * extra.scale
-
-	// v.hadj.SetValue(scrollX)
-	// v.vadj.SetValue(scrollY)
-
-	viewportAlloc := v.Scroll.Allocation()
-
-	posX, posY := imageOrigin(
-		w, h,
-		float64(viewportAlloc.Width()),
-		float64(viewportAlloc.Height()))
-	extra.fixed.Move(v.Embed, posX, posY)
-}
-
-// posX/Y: Default to (0, 0) origin and let ScrolledWindow handle moving.
-func imageOrigin(w, h, vpw, vph float64) (posX, posY float64) {
-	// Center the dimensions if they're smaller than the parent viewport.
-	if vpw > w {
-		posX = (vpw - w) / 2
-	}
-	if vph > h {
-		posY = (vph - h) / 2
-	}
-	return
-}
-
-func round(v float64) int {
-	return int(math.Round(v))
+	v.zoom = math.Min(wscale, hscale)
 }
