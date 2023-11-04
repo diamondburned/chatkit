@@ -10,7 +10,6 @@ import (
 	"os"
 	"path"
 
-	"github.com/diamondburned/chatkit/components/embed"
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
 	"github.com/diamondburned/gotk4/pkg/gdk/v4"
 	"github.com/diamondburned/gotk4/pkg/gio/v2"
@@ -28,7 +27,7 @@ type Viewer struct {
 	ToastOverlay *adw.ToastOverlay
 	Overlay      *gtk.Overlay
 	Scroll       *gtk.ScrolledWindow
-	Embed        *embed.Embed
+	Embed        *Embed
 
 	BackButton    *gtk.Button
 	ControlsStart ControlsBoxStart
@@ -58,9 +57,9 @@ type ControlsBoxEnd struct {
 var ControlsStyles = []string{"osd", "circular"}
 
 // NewViewer creates a new instance of Viewer window, representing an image viewer.
-func NewViewer(ctx context.Context, uri string, opts embed.Opts) (*Viewer, error) {
+func NewViewer(ctx context.Context, uri string, opts Opts) (*Viewer, error) {
 	v := Viewer{ctx: ctx}
-	v.Embed = embed.New(ctx, 0, 0, opts)
+	v.Embed = New(ctx, 0, 0, opts)
 	v.Embed.SetFromURL(uri)
 
 	v.ToastOverlay = adw.NewToastOverlay()
@@ -144,7 +143,7 @@ func NewViewer(ctx context.Context, uri string, opts embed.Opts) (*Viewer, error
 	})
 
 	switch opts.Type {
-	case embed.EmbedTypeImage, embed.EmbedTypeGIF:
+	case EmbedTypeImage, EmbedTypeGIF:
 		v.Embed.SetHExpand(true)
 		v.Embed.SetVExpand(true)
 
@@ -177,7 +176,7 @@ func NewViewer(ctx context.Context, uri string, opts embed.Opts) (*Viewer, error
 
 		v.Scroll.AddController(dragCtrl)
 
-	case embed.EmbedTypeGIFV, embed.EmbedTypeVideo:
+	case EmbedTypeGIFV, EmbedTypeVideo:
 		v.Embed.SetVExpand(true)
 		v.Embed.SetHExpand(true)
 		v.Embed.SetVAlign(gtk.AlignFill)
