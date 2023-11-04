@@ -17,6 +17,8 @@ import (
 	"github.com/diamondburned/gotkit/app"
 	"github.com/diamondburned/gotkit/gtkutil"
 	"github.com/diamondburned/gotkit/gtkutil/imgutil"
+
+	coreglib "github.com/diamondburned/gotk4/pkg/core/glib"
 )
 
 // TODO: In libadwaita 1.4 replace BackButton with `set_show_back_button“
@@ -33,10 +35,7 @@ type Viewer struct {
 	ControlsStart ControlsBoxStart
 	ControlsEnd   ControlsBoxEnd
 
-	vadj  *gtk.Adjustment
-	hadj  *gtk.Adjustment
-
-	zoom float64
+	zoom     float64
 	filename string
 
 	ctx context.Context
@@ -75,9 +74,6 @@ func NewViewer(ctx context.Context, uri string, opts Opts) (*Viewer, error) {
 	v.Overlay.SetChild(v.Scroll)
 
 	v.zoom = 1.0
-
-	v.vadj = v.Scroll.VAdjustment()
-	v.hadj = v.Scroll.HAdjustment()
 
 	v.Window = adw.NewWindow()
 	v.SetSizeRequest(360, 360)
@@ -164,16 +160,18 @@ func NewViewer(ctx context.Context, uri string, opts Opts) (*Viewer, error) {
 		// properly.
 		var originX, originY float64
 
+		hadjRef := coreglib.NewWeakRef(v.Scroll.VAdjustment())
+		vadjRef := coreglib.NewWeakRef(v.Scroll.HAdjustment())
+
 		dragCtrl := gtk.NewGestureDrag()
 		dragCtrl.ConnectDragBegin(func(x, y float64) {
-			originX = v.hadj.Value()
-			originY = v.vadj.Value()
+			originX = hadjRef.Get().Value()
+			originY = vadjRef.Get().Value()
 		})
 		dragCtrl.ConnectDragUpdate(func(offsetX, offsetY float64) {
-			v.hadj.SetValue(originX - offsetX)
-			v.vadj.SetValue(originY - offsetY)
+			hadjRef.Get().SetValue(originX - offsetX)
+			vadjRef.Get().SetValue(originY - offsetY)
 		})
-
 		v.Scroll.AddController(dragCtrl)
 
 	case EmbedTypeGIFV, EmbedTypeVideo:
@@ -200,8 +198,10 @@ func newActionButton(target gtk.Widgetter, text, icon, action string, styles []s
 		button.SetCSSClasses(styles)
 	}
 
+	targetRef := coreglib.NewWeakRef(target)
+
 	button.ConnectClicked(func() {
-		base := gtk.BaseWidget(target)
+		base := gtk.BaseWidget(targetRef.Get())
 		base.ActivateAction(action, nil)
 	})
 
@@ -251,22 +251,26 @@ func (v *Viewer) download() {
 	chooser.SetModal(true)
 	chooser.SetCurrentName(v.filename)
 
+	chooserRef := coreglib.NewWeakRef(chooser)
+	toastRef := coreglib.NewWeakRef(v.ToastOverlay)
+	embedURL := v.Embed.URL()
+
 	chooser.ConnectResponse(func(resp int) {
 		if resp == int(gtk.ResponseAccept) {
-			file := chooser.File()
-			v.saveToFile(file, v.Embed.URL())
+			file := chooserRef.Get().File()
+			saveToFile(file, embedURL, toastRef.Get())
 		}
 	})
 
 	chooser.Show()
 }
 
-func (v *Viewer) saveToFile(file *gio.File, pictureURL string) {
+func saveToFile(file *gio.File, pictureURL string, toast *adw.ToastOverlay) {
 	outPath := file.Path()
 
 	response, err := http.Get(pictureURL)
 	if err != nil {
-		v.ToastOverlay.AddToast(adw.NewToast("An error occured while downloading picture data"))
+		toast.AddToast(adw.NewToast("An error occured while downloading picture data"))
 		fmt.Println("An error occured while downloading picture data:", err)
 		return
 	}
@@ -274,7 +278,7 @@ func (v *Viewer) saveToFile(file *gio.File, pictureURL string) {
 
 	out, err := os.Create(outPath)
 	if err != nil {
-		v.ToastOverlay.AddToast(adw.NewToast("An I/O error occurred while creating the output file"))
+		toast.AddToast(adw.NewToast("An I/O error occurred while creating the output file"))
 		fmt.Println("An I/O error occurred while creating the output file:", err)
 		return
 	}
@@ -282,12 +286,12 @@ func (v *Viewer) saveToFile(file *gio.File, pictureURL string) {
 
 	_, err = io.Copy(out, response.Body)
 	if err != nil {
-		v.ToastOverlay.AddToast(adw.NewToast("An I/O error occurred while saving the file"))
+		toast.AddToast(adw.NewToast("An I/O error occurred while saving the file"))
 		fmt.Println("An I/O error occurred while saving the file:", err)
 		return
 	}
 
-	v.ToastOverlay.AddToast(adw.NewToast("Picture saved successfully"))
+	toast.AddToast(adw.NewToast("Picture saved successfully"))
 }
 
 func (v *Viewer) copyURL() {
