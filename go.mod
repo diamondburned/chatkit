@@ -4,6 +4,7 @@ go 1.18
 
 require (
 	github.com/alecthomas/chroma v0.10.0
+	github.com/diamondburned/gotk4-adwaita/pkg v0.0.0-20230307040502-bfe82926e1be
 	github.com/diamondburned/gotk4/pkg v0.0.6-0.20230825053034-ad325703aa2e
 	github.com/diamondburned/gotkit v0.0.0-20221217224254-30e97c8b6598
 	github.com/dustin/go-humanize v1.0.0
