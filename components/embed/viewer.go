@@ -76,7 +76,7 @@ func NewViewer(ctx context.Context, uri string, opts Opts) (*Viewer, error) {
 	v.zoom = 1.0
 
 	v.Window = adw.NewWindow()
-	v.SetSizeRequest(360, 360)
+	v.SetDefaultSize(360, 360)
 	v.SetTransientFor(app.GTKWindowFromContext(ctx))
 	v.SetModal(true)
 
