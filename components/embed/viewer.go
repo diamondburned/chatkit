@@ -16,6 +16,7 @@ import (
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 	"github.com/diamondburned/gotkit/app"
 	"github.com/diamondburned/gotkit/gtkutil"
+	"github.com/diamondburned/gotkit/gtkutil/cssutil"
 	"github.com/diamondburned/gotkit/gtkutil/imgutil"
 
 	coreglib "github.com/diamondburned/gotk4/pkg/core/glib"
@@ -53,7 +54,18 @@ type ControlsBoxEnd struct {
 	*gtk.Box
 }
 
-var ControlsStyles = []string{"osd", "circular"}
+var controlsStyles = []string{"osd", "circular"}
+
+var _ = cssutil.WriteCSS(`
+	.thumbnail-embed-viewer .thumbnail-embed {
+		border: none;
+	}
+	.thumbnail-embed-viewer .thumbnail-embed,
+	.thumbnail-embed-viewer .thumbnail-embed > button,
+	.thumbnail-embed-viewer .thumbnail-embed > button > * {
+		border-radius: 0;
+	}
+`)
 
 // NewViewer creates a new instance of Viewer window, representing an image viewer.
 func NewViewer(ctx context.Context, uri string, opts Opts) (*Viewer, error) {
@@ -78,6 +90,7 @@ func NewViewer(ctx context.Context, uri string, opts Opts) (*Viewer, error) {
 	parentWindow := app.GTKWindowFromContext(ctx)
 
 	v.Window = adw.NewWindow()
+	v.AddCSSClass("thumbnail-embed-viewer")
 	v.SetTransientFor(parentWindow)
 	v.SetDefaultSize(parentWindow.Width(), parentWindow.Height())
 	v.SetModal(true)
@@ -101,9 +114,9 @@ func NewViewer(ctx context.Context, uri string, opts Opts) (*Viewer, error) {
 
 	v.ControlsStart = ControlsBoxStart{
 		Box:          gtk.NewBox(gtk.OrientationHorizontal, 6),
-		Download:     newActionButton(v, "Download", "folder-download-symbolic", "embedviewer.download", ControlsStyles),
-		CopyURL:      newActionButton(v, "Copy URL", "edit-copy-symbolic", "embedviewer.copy-url", ControlsStyles),
-		OpenOriginal: newActionButton(v, "Open Original", "earth-symbolic", "embedviewer.open-original", ControlsStyles),
+		Download:     newActionButton(v, "Download", "folder-download-symbolic", "embedviewer.download", controlsStyles),
+		CopyURL:      newActionButton(v, "Copy URL", "edit-copy-symbolic", "embedviewer.copy-url", controlsStyles),
+		OpenOriginal: newActionButton(v, "Open Original", "earth-symbolic", "embedviewer.open-original", controlsStyles),
 	}
 
 	v.ControlsStart.SetMarginBottom(18)
