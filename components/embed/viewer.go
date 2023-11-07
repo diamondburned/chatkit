@@ -75,9 +75,11 @@ func NewViewer(ctx context.Context, uri string, opts Opts) (*Viewer, error) {
 
 	v.zoom = 1.0
 
+	parentWindow := app.GTKWindowFromContext(ctx)
+
 	v.Window = adw.NewWindow()
-	v.SetDefaultSize(360, 360)
-	v.SetTransientFor(app.GTKWindowFromContext(ctx))
+	v.SetTransientFor(parentWindow)
+	v.SetDefaultSize(parentWindow.Width(), parentWindow.Height())
 	v.SetModal(true)
 
 	url, err := url.Parse(v.Embed.URL())
