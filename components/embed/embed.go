@@ -84,6 +84,10 @@ type Opts struct {
 	// CanHide, if true, will make the image hide itself on error. Use this for
 	// anything not important, like embeds.
 	CanHide bool
+	// IgnoreWidth, if true, will cause Embed to be initialized without ever
+	// setting a width request. This has the benefit of allowing the Embed to be
+	// shrunken to any width, but it will introduce letterboxing.
+	IgnoreWidth bool
 }
 
 // Embed is a user-clickable image with an open callback.
@@ -534,6 +538,9 @@ func (e *Embed) SetSizeRequest(w, h int) {
 	if e.maxSize != [2]int{} {
 		w, h = imgutil.MaxSize(w, h, e.maxSize[0], e.maxSize[1])
 	}
+	if e.opts.IgnoreWidth {
+		w = -1
+	}
 	e.Frame.SetSizeRequest(w, h)
 }
 
@@ -544,6 +551,10 @@ func (e *Embed) setSize(w, h int) {
 	}
 
 	e.curSize = [2]int{w, h}
+
+	if e.opts.IgnoreWidth {
+		w = -1
+	}
 	e.Frame.SetSizeRequest(w, h)
 }
 
