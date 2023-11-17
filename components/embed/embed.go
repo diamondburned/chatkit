@@ -209,6 +209,12 @@ func New(ctx context.Context, maxW, maxH int, opts Opts) *Embed {
 	e.Thumbnail.SetCanShrink(true)
 	e.Thumbnail.SetKeepAspectRatio(true)
 
+	pictureRef := coreglib.NewWeakRef(e.Thumbnail)
+	e.Thumbnail.ConnectDestroy(func() {
+		picture := pictureRef.Get()
+		picture.SetPaintable(nil)
+	})
+
 	e.Button = gtk.NewButton()
 	e.Button.SetHasFrame(false)
 	e.Button.ConnectClicked(e.activate)
@@ -256,12 +262,13 @@ func New(ctx context.Context, maxW, maxH int, opts Opts) *Embed {
 					video.SetLoop(e.opts.Type.IsLooped())
 					video.SetMediaStream(vi.media)
 
-					videoRef := coreglib.NewWeakRef(video)
+					mediaRef := coreglib.NewWeakRef(vi.media)
 					video.ConnectUnmap(func() {
-						video := videoRef.Get()
-						media := gtk.BaseMediaStream(video.MediaStream())
+						media := mediaRef.Get()
 						media.Ended()
 					})
+
+					videoRef := coreglib.NewWeakRef(video)
 					video.ConnectDestroy(func() {
 						video := videoRef.Get()
 						video.SetMediaStream(nil)
@@ -292,24 +299,18 @@ func New(ctx context.Context, maxW, maxH int, opts Opts) *Embed {
 				// It's to prevent playing when the user already stopped
 				// hovering over the thumbnail.
 				loaded: func(vi *extraVideoEmbed) {
+					mediaRef := coreglib.NewWeakRef(vi.media)
+
 					e.Thumbnail.SetPaintable(vi.media)
+					e.Thumbnail.ConnectUnmap(func() {
+						media := mediaRef.Get()
+						media.Ended()
+					})
+
 					vi.media.SetPlaying(playing)
 				},
 			}
 			e.extra = vi
-
-			picture := e.Thumbnail.Picture
-			pictureRef := coreglib.NewWeakRef(picture)
-
-			picture.ConnectUnmap(func() {
-				picture := pictureRef.Get()
-				media := gtk.BaseMediaStream(picture.Paintable().Cast().(gtk.MediaStreamer))
-				media.Ended()
-			})
-			picture.ConnectDestroy(func() {
-				picture := pictureRef.Get()
-				picture.SetPaintable(nil)
-			})
 
 			if !opts.Autoplay {
 				gif := newGIFLabel(true)
