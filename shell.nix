@@ -14,4 +14,5 @@ in import "${gotk4-nix}/shell.nix" {
 		version = "dev";
 	};
 	usePatchedGo = false;
+	buildInputs = pkgs: with pkgs; [ libadwaita ];
 }
