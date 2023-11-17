@@ -5,8 +5,8 @@ go 1.18
 require (
 	github.com/alecthomas/chroma v0.10.0
 	github.com/diamondburned/gotk4-adwaita/pkg v0.0.0-20230307040502-bfe82926e1be
-	github.com/diamondburned/gotk4/pkg v0.0.6-0.20230825053034-ad325703aa2e
-	github.com/diamondburned/gotkit v0.0.0-20231117065738-52b5045f5ba8
+	github.com/diamondburned/gotk4/pkg v0.0.6-0.20231117083507-eb41da62b149
+	github.com/diamondburned/gotkit v0.0.0-20231117094938-ace9cfa5e044
 	github.com/dustin/go-humanize v1.0.0
 	github.com/pkg/errors v0.9.1
 	github.com/yuin/goldmark v1.4.13

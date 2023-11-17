@@ -71,8 +71,12 @@ var _ = cssutil.WriteCSS(`
 func NewViewer(ctx context.Context, uri string, opts Opts) (*Viewer, error) {
 	opts.Autoplay = true
 
+	parentWindow := app.GTKWindowFromContext(ctx)
+	w := parentWindow.Width()
+	h := parentWindow.Height()
+
 	v := Viewer{ctx: ctx}
-	v.Embed = New(ctx, 0, 0, opts)
+	v.Embed = New(ctx, w, h, opts)
 	v.Embed.SetFromURL(uri)
 
 	v.ToastOverlay = adw.NewToastOverlay()
@@ -89,12 +93,10 @@ func NewViewer(ctx context.Context, uri string, opts Opts) (*Viewer, error) {
 
 	v.zoom = 1.0
 
-	parentWindow := app.GTKWindowFromContext(ctx)
-
 	v.Window = adw.NewWindow()
 	v.AddCSSClass("thumbnail-embed-viewer")
 	v.SetTransientFor(parentWindow)
-	v.SetDefaultSize(parentWindow.Width(), parentWindow.Height())
+	v.SetDefaultSize(w, h)
 	v.SetModal(true)
 
 	url, err := url.Parse(v.Embed.URL())

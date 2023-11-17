@@ -217,6 +217,7 @@ func New(ctx context.Context, maxW, maxH int, opts Opts) *Embed {
 
 	e.Button = gtk.NewButton()
 	e.Button.SetHasFrame(false)
+	e.Button.SetOverflow(gtk.OverflowHidden)
 	e.Button.ConnectClicked(e.activate)
 	embedCSS(e.Button)
 	bindHoverPointer(e.Button)
