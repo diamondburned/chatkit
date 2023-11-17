@@ -69,6 +69,8 @@ var _ = cssutil.WriteCSS(`
 
 // NewViewer creates a new instance of Viewer window, representing an image viewer.
 func NewViewer(ctx context.Context, uri string, opts Opts) (*Viewer, error) {
+	opts.Autoplay = true
+
 	v := Viewer{ctx: ctx}
 	v.Embed = New(ctx, 0, 0, opts)
 	v.Embed.SetFromURL(uri)
@@ -166,7 +168,7 @@ func NewViewer(ctx context.Context, uri string, opts Opts) (*Viewer, error) {
 		v.Scroll.SetPolicy(gtk.PolicyAutomatic, gtk.PolicyAutomatic)
 
 		// Disable click-to-open so we can handle panning.
-		v.Embed.SetOpenURL(nil)
+		v.Embed.SetCanTarget(false)
 		v.Embed.NotifyImage(func() {
 			v.scaleFit()
 		})

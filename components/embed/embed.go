@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/diamondburned/chatkit/components/progress"
+	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 	"github.com/diamondburned/gotk4/pkg/pango"
@@ -28,6 +29,8 @@ import (
 	"github.com/diamondburned/gotkit/utils/cachegc"
 	"github.com/dustin/go-humanize"
 	"github.com/pkg/errors"
+
+	coreglib "github.com/diamondburned/gotk4/pkg/core/glib"
 )
 
 // EmbedType indicates the type of the Embed being constructed. The type
@@ -88,6 +91,12 @@ type Opts struct {
 	// setting a width request. This has the benefit of allowing the Embed to be
 	// shrunken to any width, but it will introduce letterboxing.
 	IgnoreWidth bool
+	// Autoplay, if true, will cause the video to autoplay. For GIFs and
+	// GIFVs, the user won't have to hover over the image to play it.
+	Autoplay bool
+	// Tooltip, if true, will cause the embed to show a tooltip when hovered.
+	// If the embed errors out, a tooltip will be shown regardless.
+	Tooltip bool
 }
 
 // Embed is a user-clickable image with an open callback.
@@ -98,7 +107,7 @@ type Opts struct {
 //   - Button
 //   - Thumbnail
 type Embed struct {
-	*gtk.Frame
+	*adw.Bin
 	Button    *gtk.Button
 	Thumbnail *onlineimage.Picture
 
@@ -114,24 +123,18 @@ type Embed struct {
 	opts    Opts
 }
 
-type extraVideoEmbed struct {
-	box      *gtk.Box
-	play     *gtk.Image
-	progress *progress.Bar
-
-	video *gtk.Video
-	media *gtk.MediaFile
-
-	ctx gtkutil.Cancellable
-}
-
 type extraImageEmbed struct{}
 
-func (*extraVideoEmbed) extra() {}
 func (*extraImageEmbed) extra() {}
 
+type extraGIFEmbed struct {
+	anim *onlineimage.AnimationController
+}
+
+func (*extraGIFEmbed) extra() {}
+
 var embedCSS = cssutil.Applier("thumbnail-embed", `
-	.thumbnail-embed > button {
+	.thumbnail-embed {
 		padding: 0;
 		margin:  0;
 		/* margin-left: -2px; */
@@ -139,12 +142,9 @@ var embedCSS = cssutil.Applier("thumbnail-embed", `
 		transition-duration: 150ms;
 		transition-property: all;
 	}
-	.thumbnail-embed > button,
-	.thumbnail-embed > button:hover {
+	.thumbnail-embed,
+	.thumbnail-embed:hover {
 		background: none;
-	}
-	.thumbnail-embed:not(.thumbnail-embed-interactive) > button:hover .thumbnail-embed-image {
-		filter: contrast(80%) brightness(80%);
 	}
 	.thumbnail-embed .thumbnail-embed-image {
 		background-color: black;
@@ -211,16 +211,18 @@ func New(ctx context.Context, maxW, maxH int, opts Opts) *Embed {
 
 	e.Button = gtk.NewButton()
 	e.Button.SetHasFrame(false)
-	e.Button.ConnectClicked(func() { e.click() })
+	e.Button.ConnectClicked(e.activate)
+	embedCSS(e.Button)
+	bindHoverPointer(e.Button)
 
-	e.Frame = gtk.NewFrame("")
-	e.Frame.SetOverflow(gtk.OverflowHidden)
-	e.Frame.SetChild(e.Button)
-	embedCSS(e)
+	e.Bin = adw.NewBin()
+	e.Bin.AddCSSClass("thumbnail-embed-bin")
+	e.Bin.SetChild(e.Button)
 
 	if opts.Type == EmbedTypeImage {
 		e.AddCSSClass("thumbnail-embed-typeimage")
 		e.Button.SetChild(e.Thumbnail)
+
 	} else {
 		overlay := gtk.NewOverlay()
 		overlay.SetChild(e.Thumbnail)
@@ -228,74 +230,131 @@ func New(ctx context.Context, maxW, maxH int, opts Opts) *Embed {
 		e.Button.SetChild(overlay)
 
 		switch opts.Type {
-		case EmbedTypeVideo, EmbedTypeGIFV:
+		case EmbedTypeVideo:
 			e.AddCSSClass("thumbnail-embed-interactive")
-			switch opts.Type {
-			case EmbedTypeVideo:
-				e.AddCSSClass("thumbnail-embed-typevideo")
-			case EmbedTypeGIFV:
-				e.AddCSSClass("thumbnail-embed-typegifv")
-			}
+			e.AddCSSClass("thumbnail-embed-typevideo")
 
 			play := gtk.NewImageFromIconName("media-playback-start-symbolic")
 			play.AddCSSClass("thumbnail-embed-play")
 			play.SetIconSize(gtk.IconSizeNormal)
 			play.SetHAlign(gtk.AlignCenter)
 
-			progress := progress.NewBar()
-			progress.SetLabelFunc(func(n, max int64) string {
-				if max == 0 {
-					return "Downloading..."
-				}
-				return fmt.Sprintf(
-					"Downloading... (%s/%s)",
-					humanize.Bytes(uint64(n)),
-					humanize.Bytes(uint64(max)),
-				)
-			})
-			progress.Hide()
+			progress := newVideoProgress()
 
 			box := gtk.NewBox(gtk.OrientationVertical, 0)
 			box.SetVAlign(gtk.AlignCenter)
 			box.SetHAlign(gtk.AlignCenter)
 			box.Append(play)
 			box.Append(progress)
-
 			overlay.AddOverlay(box)
 
 			e.extra = &extraVideoEmbed{
-				box:      box,
-				play:     play,
 				progress: progress,
+				loaded: func(vi *extraVideoEmbed) {
+					video := gtk.NewVideo()
+					video.AddCSSClass("thumbnail-embed-video")
+					video.SetLoop(e.opts.Type.IsLooped())
+					video.SetMediaStream(vi.media)
+
+					videoRef := coreglib.NewWeakRef(video)
+					video.ConnectUnmap(func() {
+						video := videoRef.Get()
+						media := gtk.BaseMediaStream(video.MediaStream())
+						media.Ended()
+					})
+					video.ConnectDestroy(func() {
+						video := videoRef.Get()
+						video.SetMediaStream(nil)
+					})
+
+					vi.media.Play()
+
+					// Override child with the actual Video. The user won't be
+					// seeing the thumbnail anymore.
+					e.Bin.SetChild(video)
+				},
+			}
+
+		case EmbedTypeGIFV:
+			e.AddCSSClass("thumbnail-embed-interactive")
+			e.AddCSSClass("thumbnail-embed-typegifv")
+
+			progress := newVideoProgress()
+			progress.SetHAlign(gtk.AlignCenter)
+			progress.SetVAlign(gtk.AlignCenter)
+			overlay.AddOverlay(progress)
+
+			playing := opts.Autoplay
+
+			vi := &extraVideoEmbed{
+				progress: progress,
+				// This sets playing right after the media is loaded.
+				// It's to prevent playing when the user already stopped
+				// hovering over the thumbnail.
+				loaded: func(vi *extraVideoEmbed) {
+					e.Thumbnail.SetPaintable(vi.media)
+					vi.media.SetPlaying(playing)
+				},
+			}
+			e.extra = vi
+
+			picture := e.Thumbnail.Picture
+			pictureRef := coreglib.NewWeakRef(picture)
+
+			picture.ConnectUnmap(func() {
+				picture := pictureRef.Get()
+				media := gtk.BaseMediaStream(picture.Paintable().Cast().(gtk.MediaStreamer))
+				media.Ended()
+			})
+			picture.ConnectDestroy(func() {
+				picture := pictureRef.Get()
+				picture.SetPaintable(nil)
+			})
+
+			if !opts.Autoplay {
+				gif := newGIFLabel(true)
+				overlay.AddOverlay(gif)
+
+				bindButtonPlayback(e.Button, opts, func(play bool) {
+					playing = play
+					gif.SetVisible(!play)
+
+					if vi.media != nil {
+						// This sets playing when the media has already been
+						// loaded.
+						if play {
+							vi.media.Play()
+						} else {
+							vi.media.Pause()
+							vi.media.Seek(0)
+						}
+					} else {
+						e.Thumbnail.Disable()
+						e.activate()
+					}
+				})
 			}
 
 		case EmbedTypeGIF:
 			e.AddCSSClass("thumbnail-embed-typegif")
+			e.AddCSSClass("thumbnail-embed-interactive")
 
-			gif := gtk.NewLabel("GIF")
-			gif.AddCSSClass("thumbnail-embed-gifmark")
-			gif.SetCanTarget(false)
-			gif.SetVAlign(gtk.AlignStart) // top
-			gif.SetHAlign(gtk.AlignEnd)   // right
+			anim := e.Thumbnail.EnableAnimation()
+			e.extra = &extraGIFEmbed{anim: anim}
 
-			overlay.AddOverlay(gif)
+			if !opts.Autoplay {
+				gif := newGIFLabel(false)
+				overlay.AddOverlay(gif)
 
-			if onlineimage.CanAnimate {
-				e.AddCSSClass("thumbnail-embed-interactive")
-
-				motion := gtk.NewEventControllerMotion()
-				e.Button.AddController(motion)
-
-				anim := e.Thumbnail.EnableAnimation()
-
-				// Show or hide the GIF icon while it's playing.
-				motion.ConnectEnter(func(x, y float64) {
-					anim.Start()
-					gif.Hide()
-				})
-				motion.ConnectLeave(func() {
-					anim.Stop()
-					gif.Show()
+				bindButtonPlayback(e.Button, opts, func(play bool) {
+					if play {
+						anim.Start()
+						// Show or hide the GIF icon while it's playing.
+						gif.Hide()
+					} else {
+						anim.Stop()
+						gif.Show()
+					}
 				})
 			}
 		}
@@ -308,13 +367,65 @@ func New(ctx context.Context, maxW, maxH int, opts Opts) *Embed {
 		}
 	})
 
-	e.SetOpenURL(e.ActivateDefault)
 	return e
+}
+
+func newVideoProgress() *progress.Bar {
+	progress := progress.NewBar()
+	progress.SetLabelFunc(func(n, max int64) string {
+		if max == 0 {
+			return "Downloading..."
+		}
+		return fmt.Sprintf(
+			"Downloading... (%s/%s)",
+			humanize.Bytes(uint64(n)),
+			humanize.Bytes(uint64(max)),
+		)
+	})
+	progress.Hide()
+	return progress
+}
+
+func newGIFLabel(isGIFV bool) *gtk.Label {
+	gif := gtk.NewLabel("")
+	if isGIFV {
+		gif.SetText("GIFV")
+	} else {
+		gif.SetText("GIF")
+	}
+	gif.AddCSSClass("thumbnail-embed-gifmark")
+	gif.SetCanTarget(false)
+	gif.SetVAlign(gtk.AlignStart) // top
+	gif.SetHAlign(gtk.AlignEnd)   // right
+	return gif
+}
+
+func bindButtonPlayback(button *gtk.Button, opts Opts, onChange func(play bool)) {
+	motion := gtk.NewEventControllerMotion()
+	motion.ConnectEnter(func(x, y float64) { onChange(true) })
+	motion.ConnectLeave(func() { onChange(false) })
+	button.AddController(motion)
+}
+
+func bindHoverPointer(button *gtk.Button) {
+	buttonRef := coreglib.NewWeakRef(button)
+
+	motion := gtk.NewEventControllerMotion()
+	motion.ConnectEnter(func(x, y float64) {
+		button := buttonRef.Get()
+		button.SetCursorFromName("pointer")
+	})
+	motion.ConnectLeave(func() {
+		button := buttonRef.Get()
+		button.SetCursor(nil)
+	})
+
+	button.AddController(motion)
 }
 
 // SetHAlign sets the horizontal alignment of the embed relative to its parent.
 func (e *Embed) SetHAlign(align gtk.Align) {
-	e.Frame.SetHAlign(align)
+	e.Bin.SetHAlign(align)
 	e.Button.SetHAlign(align)
 }
 
@@ -322,7 +433,7 @@ func (e *Embed) SetHAlign(align gtk.Align) {
 // name.
 func (e *Embed) SetName(name string) {
 	e.name = name
-	if !e.Button.HasCSSClass("thumbnail-embed-interactive") {
+	if e.opts.Tooltip {
 		e.Button.SetTooltipText(name)
 	}
 }
@@ -335,7 +446,25 @@ func (e *Embed) URL() string {
 // SetFromURL sets the URL of the thumbnail embed.
 func (e *Embed) SetFromURL(url string) {
 	e.url = url
-	e.Thumbnail.SetURL(url)
+
+	switch embedType := TypeFromURL(url); embedType {
+
+	case EmbedTypeImage, EmbedTypeGIF:
+		e.Thumbnail.SetURL(url)
+
+		if embedType == EmbedTypeGIF && e.opts.Autoplay {
+			gif := e.extra.(*extraGIFEmbed)
+			gif.anim.Start()
+		}
+
+	case EmbedTypeVideo, EmbedTypeGIFV:
+		e.Thumbnail.Disable()
+
+		if e.opts.Autoplay {
+			vi := e.extra.(*extraVideoEmbed)
+			vi.downloadVideo(e)
+		}
+	}
 }
 
 // NotifyImage calls f everytime the Embed thumbnail changes.
@@ -381,7 +510,7 @@ func (e *Embed) onError(err error) {
 	}
 
 	var tooltip string
-	if e.name != "" {
+	if e.opts.Tooltip && e.name != "" {
 		tooltip += html.EscapeString(e.name) + "\n"
 	}
 	tooltip += "<b>Error:</b> " + html.EscapeString(err.Error())
@@ -397,127 +526,95 @@ func (e *Embed) setBusy(busy bool) {
 	gtk.BaseWidget(e).SetSensitive(!busy)
 }
 
-func (e *Embed) downloadVideo(vi *extraVideoEmbed) {
-	if vi.ctx == nil {
-		vi.ctx = gtkutil.WithVisibility(e.ctx, e)
-		vi.ctx.OnRenew(func(context.Context) func() {
-			// If we don't have a MediaFile yet and the video is reshown, then
-			// allow clicking the video so the user can redownload.
-			e.Frame.SetChild(e.Button)
-			if vi.media == nil {
-				base := gtk.BaseWidget(e)
-				base.SetSensitive(true)
-			}
+type extraVideoEmbed struct {
+	progress *progress.Bar
+	media    *gtk.MediaFile
+	loaded   func(*extraVideoEmbed)
+}
 
-			return func() {}
-		})
+func (*extraVideoEmbed) extra() {}
+
+func (vi *extraVideoEmbed) downloadVideo(e *Embed) {
+	if e.isBusy() || vi.media != nil {
+		return
 	}
 
-	if vi.video == nil {
-		vi.video = gtk.NewVideo()
-		vi.video.AddCSSClass("thumbnail-embed-video")
-		vi.video.SetLoop(e.opts.Type.IsLooped())
-
-		var handle glib.SignalHandle
-		handle = e.ConnectUnmap(func() {
-			e.HandlerDisconnect(handle)
-
-			if vi.media != nil {
-				vi.media.Ended()
-				vi.video.Unparent()
-			}
-
-			vi.video = nil
-		})
+	vi.progress.Show()
+	if e.url == "" {
+		vi.progress.Error(errors.New("video has no URL"))
+		return
 	}
 
-	if !e.isBusy() && vi.media == nil {
-		vi.progress.Show()
-		if e.url == "" {
-			vi.progress.Error(errors.New("video has no URL"))
-			return
-		}
+	e.setBusy(true)
+	cleanup := func() { e.setBusy(false) }
 
-		e.setBusy(true)
-		cleanup := func() { e.setBusy(false) }
+	ctx := e.ctx
 
-		ctx := vi.ctx.Take()
+	u, err := url.Parse(e.url)
+	if err != nil {
+		vi.progress.Error(errors.Wrap(err, "invalid URL"))
+		return
+	}
 
-		u, err := url.Parse(e.url)
-		if err != nil {
-			vi.progress.Error(errors.Wrap(err, "invalid URL"))
-			return
-		}
+	gtkutil.Async(ctx, func() func() {
+		var file string
 
-		gtkutil.Async(ctx, func() func() {
-			var file string
-
-			switch u.Scheme {
-			case "http", "https":
-				cacheDir := app.FromContext(ctx).CachePath("videos")
-				cacheDst := urlPath(cacheDir, u.String())
-				if !fetchURL(ctx, u.String(), cacheDst, vi.progress) {
-					return cleanup
-				}
-				file = cacheDst
-			case "file":
-				file = u.Host + u.Path
-			default:
-				return func() {
-					vi.progress.Error(fmt.Errorf("unknown scheme %q (go do the refactor!)", u.Scheme))
-					cleanup()
-				}
+		switch u.Scheme {
+		case "http", "https":
+			cacheDir := app.FromContext(ctx).CachePath("videos")
+			cacheDst := urlPath(cacheDir, u.String())
+			if !fetchURL(ctx, u.String(), cacheDst, vi.progress) {
+				return cleanup
 			}
-
+			file = cacheDst
+		case "file":
+			file = u.Host + u.Path
+		default:
 			return func() {
+				vi.progress.Error(fmt.Errorf("unknown scheme %q (go do the refactor!)", u.Scheme))
 				cleanup()
-
-				// TODO: consider just using vi.media directly, since it's a
-				// Paintable, so we can just directly use it. Integrating it
-				// with onlineimage.Picture might be tricky, however.
-				vi.media = gtk.NewMediaFileForFilename(file)
-				vi.media.SetLoop(e.opts.Type.IsLooped())
-				vi.media.SetMuted(e.opts.Type.IsMuted())
-				vi.media.Play()
-
-				vi.video.SetMediaStream(vi.media)
-
-				// Override Frame's child with the actual Video. The user won't
-				// be seeing the thumbnail anymore.
-				e.Frame.SetChild(vi.video)
 			}
-		})
-	}
+		}
+
+		return func() {
+			cleanup()
+			vi.progress.Hide()
+
+			media := gtk.NewMediaFileForFilename(file)
+			media.SetLoop(e.opts.Type.IsLooped())
+			media.SetMuted(e.opts.Type.IsMuted())
+			vi.media = media
+
+			vi.loaded(vi)
+			vi.loaded = nil
+		}
+	})
 }
 
 // SetOpenURL sets the callback to be called when the user clicks the image.
 func (e *Embed) SetOpenURL(f func()) {
 	e.click = f
-	e.Button.SetCanTarget(f != nil)
+}
+
+func (e *Embed) activate() {
+	if e.click != nil {
+		e.click()
+		return
+	}
+
+	e.ActivateDefault()
 }
 
 // ActivateDefault triggers the default function that's called by default by
-// SetOpenURL. It opens the browser unless it's a video, then it plays.
+// SetOpenURL.
 func (e *Embed) ActivateDefault() {
 	switch e.opts.Type {
 	case EmbedTypeVideo, EmbedTypeGIFV:
 		vi := e.extra.(*extraVideoEmbed)
-		e.downloadVideo(vi)
+		vi.downloadVideo(e)
 	default:
-		// TODO: large image popup
 		app.OpenURI(e.ctx, e.url)
 	}
-}
-
-// DownloadVideoOnClick triggers the DownloadVideo function when the Embed is
-// clicked. If the Embed is not a video, then the function does nothing.
-func (e *Embed) DownloadVideoOnClick() {
-	vi, ok := e.extra.(*extraVideoEmbed)
-	if !ok {
-		return
-	}
-
-	e.SetOpenURL(func() { e.downloadVideo(vi) })
 }
 
 // SetMaxSize sets the maximum size of the image.
@@ -541,7 +638,7 @@ func (e *Embed) SetSizeRequest(w, h int) {
 	if e.opts.IgnoreWidth {
 		w = -1
 	}
-	e.Frame.SetSizeRequest(w, h)
+	e.Bin.SetSizeRequest(w, h)
 }
 
 // setSize sets the size of the image embed.
@@ -555,7 +652,7 @@ func (e *Embed) setSize(w, h int) {
 	if e.opts.IgnoreWidth {
 		w = -1
 	}
-	e.Frame.SetSizeRequest(w, h)
+	e.Bin.SetSizeRequest(w, h)
 }
 
 // Size returns the original embed size optionally scaled down, or 0 if no
