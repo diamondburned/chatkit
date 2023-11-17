@@ -261,6 +261,7 @@ func New(ctx context.Context, maxW, maxH int, opts Opts) *Embed {
 					video := gtk.NewVideo()
 					video.AddCSSClass("thumbnail-embed-video")
 					video.SetLoop(e.opts.Type.IsLooped())
+					video.SetAutoplay(e.opts.Autoplay)
 					video.SetMediaStream(vi.media)
 
 					mediaRef := coreglib.NewWeakRef(vi.media)
