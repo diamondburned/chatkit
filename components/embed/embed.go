@@ -403,11 +403,45 @@ func newGIFLabel(isGIFV bool) *gtk.Label {
 	return gif
 }
 
-func bindButtonPlayback(button *gtk.Button, opts Opts, onChange func(play bool)) {
-	motion := gtk.NewEventControllerMotion()
-	motion.ConnectEnter(func(x, y float64) { onChange(true) })
-	motion.ConnectLeave(func() { onChange(false) })
-	button.AddController(motion)
+func bindButtonPlayback(button *gtk.Button, opts Opts, onChange_ func(play bool)) {
+	var state bool
+	onChange := func(play bool) {
+		if state == play {
+			return
+		}
+		state = play
+		onChange_(play)
+	}
+
+	var motion *gtk.EventControllerMotion
+	var window *gtk.Window
+	var windowSignal glib.SignalHandle
+	buttonRef := coreglib.NewWeakRef(button)
+
+	button.ConnectMap(func() {
+		button := buttonRef.Get()
+
+		motion = gtk.NewEventControllerMotion()
+		motion.ConnectEnter(func(x, y float64) { onChange(true) })
+		motion.ConnectLeave(func() { onChange(false) })
+		button.AddController(motion)
+
+		window = button.Root().CastType(gtk.GTypeWindow).(*gtk.Window)
+		windowSignal = window.NotifyProperty("is-active", func() {
+			if !window.IsActive() {
+				onChange(false)
+			}
+		})
+	})
+
+	button.ConnectUnmap(func() {
+		button := buttonRef.Get()
+		button.RemoveController(motion)
+
+		window.HandlerDisconnect(windowSignal)
+		window = nil
+		windowSignal = 0
+	})
 }
 
 func bindHoverPointer(button *gtk.Button) {
@@ -556,6 +590,7 @@ func (vi *extraVideoEmbed) downloadVideo(e *Embed) {
 	u, err := url.Parse(e.url)
 	if err != nil {
 		vi.progress.Error(errors.Wrap(err, "invalid URL"))
+		cleanup()
 		return
 	}
 
