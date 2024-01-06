@@ -441,6 +441,8 @@ func bindButtonPlayback(button *gtk.Button, opts Opts, onChange_ func(play bool)
 		window.HandlerDisconnect(windowSignal)
 		window = nil
 		windowSignal = 0
+
+		onChange(false) // ensure it's off
 	})
 }
 
