@@ -263,7 +263,7 @@ func (v *Viewer) close() {
 func (v *Viewer) download() {
 	chooser := gtk.NewFileChooserNative(
 		"",
-		app.GTKWindowFromContext(v.ctx),
+		&v.Window.Window,
 		gtk.FileChooserActionSave,
 		"Save", "Cancel",
 	)
