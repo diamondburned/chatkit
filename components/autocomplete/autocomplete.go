@@ -248,7 +248,7 @@ func (a *Autocompleter) Autocomplete() {
 
 	a.clear()
 
-	if a.paused {
+	if a.paused || !a.tview.Mapped() {
 		a.hide()
 		return
 	}
