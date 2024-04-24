@@ -19,6 +19,7 @@ import (
 	"github.com/diamondburned/gotkit/gtkutil/cssutil"
 	"github.com/diamondburned/gotkit/gtkutil/imgutil"
 
+	"github.com/diamondburned/gotk4/pkg/core/glib"
 	coreglib "github.com/diamondburned/gotk4/pkg/core/glib"
 )
 
@@ -261,23 +262,16 @@ func (v *Viewer) close() {
 }
 
 func (v *Viewer) download() {
-	chooser := gtk.NewFileChooserNative(
-		"",
-		&v.Window.Window,
-		gtk.FileChooserActionSave,
-		"Save", "Cancel",
-	)
+	chooser := gtk.NewFileChooserNative("", &v.Window.Window, gtk.FileChooserActionSave, "Save", "Cancel")
 	chooser.SetModal(true)
 	chooser.SetCurrentName(v.filename)
 
-	chooserRef := coreglib.NewWeakRef(chooser)
-	toastRef := coreglib.NewWeakRef(v.ToastOverlay)
-	embedURL := v.Embed.URL()
-
-	chooser.ConnectResponse(func(resp int) {
+	var signal glib.SignalHandle
+	signal = chooser.ConnectResponse(func(resp int) {
 		if resp == int(gtk.ResponseAccept) {
-			file := chooserRef.Get().File()
-			saveToFile(file, embedURL, toastRef.Get())
+			file := chooser.File()
+			saveToFile(file, v.Embed.URL(), v.ToastOverlay)
+			chooser.HandlerDisconnect(signal)
 		}
 	})
 
