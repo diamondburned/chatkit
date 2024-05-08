@@ -12,6 +12,7 @@ require (
 	github.com/yuin/goldmark v1.4.13
 	github.com/zalando/go-keyring v0.2.1
 	golang.org/x/crypto v0.0.0-20210921155107-089bfa567519
+	libdb.so/go-emoji v0.0.0-20240508073816-39776eee41ac
 )
 
 require (
@@ -21,9 +22,10 @@ require (
 	github.com/dlclark/regexp2 v1.4.0 // indirect
 	github.com/godbus/dbus/v5 v5.0.6 // indirect
 	github.com/leonelquinteros/gotext v1.5.3-0.20230829162019-37f474cfb069 // indirect
+	github.com/puzpuzpuz/xsync/v3 v3.1.0 // indirect
 	github.com/yalue/merged_fs v1.2.3 // indirect
 	go4.org/unsafe/assume-no-moving-gc v0.0.0-20230221090011-e4bae7ad2296 // indirect
 	golang.org/x/image v0.0.0-20220902085622-e7cb96979f69 // indirect
 	golang.org/x/sync v0.0.0-20220722155255-886fb9371eb4 // indirect
-	golang.org/x/text v0.3.8 // indirect
+	golang.org/x/text v0.15.0 // indirect
 )

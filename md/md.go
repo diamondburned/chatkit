@@ -2,10 +2,11 @@
 package md
 
 import (
+	"unicode"
+
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 	"github.com/diamondburned/gotk4/pkg/pango"
 	"github.com/diamondburned/gotkit/gtkutil/textutil"
-
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/parser"
@@ -13,6 +14,7 @@ import (
 	"github.com/yuin/goldmark/renderer/html"
 	"github.com/yuin/goldmark/text"
 	markutil "github.com/yuin/goldmark/util"
+	"libdb.so/go-emoji"
 )
 
 // Parser is the default Markdown parser.
@@ -115,19 +117,6 @@ func insertInvisible(buf *gtk.TextBuffer, pos *gtk.TextIter, txt string) {
 	buf.ApplyTag(tag, startIter, pos)
 }
 
-// EmojiRanges describes the Unicode character ranges that indicate an emoji.
-// For reference, see https://stackoverflow.com/a/36258684/5041327.
-var EmojiRanges = [][2]rune{
-	{0x1F600, 0x1F64F}, // Emoticons
-	{0x1F300, 0x1F5FF}, // Misc Symbols and Pictographs
-	{0x1F680, 0x1F6FF}, // Transport and Map
-	{0x2600, 0x26FF},   // Misc symbols
-	{0x2700, 0x27BF},   // Dingbats
-	{0xFE00, 0xFE0F},   // Variation Selectors
-	{0x1F900, 0x1F9FF}, // Supplemental Symbols and Pictographs
-	{0x1F1E6, 0x1F1FF}, // Flags
-}
-
 var whitespaces = [255]bool{
 	' ':  true,
 	'\t': true,
@@ -138,21 +127,10 @@ var whitespaces = [255]bool{
 // IsUnicodeEmoji returns true if the given string only contains a Unicode
 // emoji.
 func IsUnicodeEmoji(v string) bool {
-runeLoop:
 	for _, r := range v {
-		// Fast path: only run the loop if this character is in any of the
-		// ranges by checking the minimum rune.
-		if r >= 0xFF {
-			for _, crange := range EmojiRanges {
-				if crange[0] <= r && r <= crange[1] {
-					continue runeLoop
-				}
-			}
-		} else if whitespaces[r] {
-			continue
+		if !unicode.IsSpace(r) && !emoji.IsEmoji(r) {
+			return false
 		}
-		// runeLoop not hit; bail.
-		return false
 	}
 	return true
 }
