@@ -17,7 +17,7 @@ type MarkdownViewer struct {
 func NewMarkdownViewer(ctx context.Context, src []byte, n ast.Node, opts ...OptionFunc) *MarkdownViewer {
 	v := block.NewViewer(ctx)
 	r := NewRenderer(src, v.State(), opts...)
-	r.Render(n)
+	r.Render(ctx, n)
 
 	return &MarkdownViewer{
 		Viewer: v,

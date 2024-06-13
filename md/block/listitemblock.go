@@ -7,10 +7,20 @@ import (
 	"github.com/diamondburned/gotkit/gtkutil/cssutil"
 )
 
+// ListIndex is a list item index.
+type ListIndex struct {
+	// Level is the depth of the list the item is in.
+	Level int
+	// Index is the index of the list item.
+	Index int
+	// Unordered is true if the list is unordered.
+	Unordered bool
+}
+
 // ListItemBlock is a text block that contains a list item.
 type ListItemBlock struct {
 	*gtk.Box
-	ListIndex *int // nil if unordered
+	ListIndex ListIndex
 
 	text *TextBlock
 }
@@ -26,22 +36,22 @@ var bulletCSS = cssutil.Applier("md-listitem-bullet", `
 `)
 
 // NewListItemBlock creates a new ListItemBlock.
-func NewListItemBlock(state *ContainerState, listIndex *int, offset int) *ListItemBlock {
+func NewListItemBlock(state *ContainerState, listIndex ListIndex) *ListItemBlock {
 	text := NewTextBlock(state)
 
 	bullet := gtk.NewLabel("")
 	bullet.SetHExpand(false)
 	bullet.SetVExpand(false)
 	bullet.SetVAlign(gtk.AlignStart)
-	bullet.SetMarginStart(offset*6 - 6)
+	bullet.SetMarginStart(listIndex.Level*6 - 6)
 	bulletCSS(bullet)
 
-	if listIndex != nil {
-		bullet.SetText(strconv.Itoa(*listIndex) + ".")
-		bullet.AddCSSClass("md-listitem-ordered")
-	} else {
+	if listIndex.Unordered {
 		bullet.SetText("•")
 		bullet.AddCSSClass("md-listitem-unordered")
+	} else {
+		bullet.SetText(strconv.Itoa(listIndex.Index) + ".")
+		bullet.AddCSSClass("md-listitem-ordered")
 	}
 
 	box := gtk.NewBox(gtk.OrientationHorizontal, 0)

@@ -1,16 +1,19 @@
 package mdrender
 
 import (
+	"context"
+	"log/slog"
 	"strconv"
 	"strings"
 
 	"github.com/diamondburned/chatkit/md/block"
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/text"
+	"libdb.so/ctxt"
 )
 
 // RendererFunc is a map of callbacks for handling each ast.Node.
-type RendererFunc func(r *Renderer, n ast.Node) ast.WalkStatus
+type RendererFunc func(ctx context.Context, r *Renderer, n ast.Node) ast.WalkStatus
 
 // OptionFunc is a function type for any options that modify Renderer's
 // internals.
@@ -34,22 +37,24 @@ func WithFallbackRenderer(renderer RendererFunc) OptionFunc {
 	}
 }
 
+// WithState adds a new container state to the given context.
+func WithState(ctx context.Context, state *block.ContainerState) context.Context {
+	return ctxt.With(ctx, state)
+}
+
 // Renderer is a rendering instance.
 type Renderer struct {
-	State *block.ContainerState
-
+	state     *block.ContainerState
 	renderers map[ast.NodeKind]RendererFunc
 	fallbackR RendererFunc
 	src       []byte
-
-	listIx *int
 }
 
 // NewRenderer creates a new renderer.
 func NewRenderer(src []byte, state *block.ContainerState, opts ...OptionFunc) *Renderer {
 	r := Renderer{
 		src:   src,
-		State: state,
+		state: state,
 	}
 
 	if len(opts) > 0 {
@@ -64,23 +69,33 @@ func NewRenderer(src []byte, state *block.ContainerState, opts ...OptionFunc) *R
 	return &r
 }
 
+// State returns the container state associated with the given context, or it
+// returns the default state.
+func (r *Renderer) State(ctx context.Context) *block.ContainerState {
+	state, ok := ctxt.From[*block.ContainerState](ctx)
+	if ok {
+		return state
+	}
+	return r.state
+}
+
 // Source returns the source bytes slice.
 func (r *Renderer) Source() []byte {
 	return r.src
 }
 
 // Render renders n recursively.
-func (r *Renderer) Render(n ast.Node) ast.WalkStatus {
-	return r.RenderSiblings(n)
+func (r *Renderer) Render(ctx context.Context, n ast.Node) ast.WalkStatus {
+	return r.RenderSiblings(ctx, n)
 }
 
 // RenderSiblings renders all siblings in n and returns SkipChildren if
 // everything is successfully rendered.
-func (r *Renderer) RenderSiblings(first ast.Node) ast.WalkStatus {
+func (r *Renderer) RenderSiblings(ctx context.Context, first ast.Node) ast.WalkStatus {
 	for n := first; n != nil; n = n.NextSibling() {
-		switch r.RenderOnce(n) {
+		switch r.RenderOnce(ctx, n) {
 		case ast.WalkContinue:
-			if r.RenderChildren(n) == ast.WalkStop {
+			if r.RenderChildren(ctx, n) == ast.WalkStop {
 				return ast.WalkStop
 			}
 		case ast.WalkSkipChildren:
@@ -94,44 +109,36 @@ func (r *Renderer) RenderSiblings(first ast.Node) ast.WalkStatus {
 }
 
 // RenderChildren renders all of n's children.
-func (r *Renderer) RenderChildren(n ast.Node) ast.WalkStatus {
-	return r.RenderSiblings(n.FirstChild())
+func (r *Renderer) RenderChildren(ctx context.Context, n ast.Node) ast.WalkStatus {
+	return r.RenderSiblings(ctx, n.FirstChild())
 }
 
 // RenderChildrenWithTag calls RenderChildren wrapped within the given tag.
-func (r *Renderer) RenderChildrenWithTag(n ast.Node, tagName string) ast.WalkStatus {
+func (r *Renderer) RenderChildrenWithTag(ctx context.Context, n ast.Node, tagName string) ast.WalkStatus {
 	status := ast.WalkContinue
 
-	text := r.State.TextBlock()
+	text := r.State(ctx).TextBlock()
 	text.TagNameBounded(tagName, func() {
-		status = r.RenderChildren(n)
+		status = r.RenderChildren(ctx, n)
 	})
 
 	return status
 }
 
-// WithState creates a copy of the current renderer with the given container
-// state.
-func (r *Renderer) WithState(state *block.ContainerState) *Renderer {
-	cpy := *r
-	cpy.State = state
-	return &cpy
-}
-
 // RenderOnce renders a single node.
-func (r *Renderer) RenderOnce(n ast.Node) ast.WalkStatus {
+func (r *Renderer) RenderOnce(ctx context.Context, n ast.Node) ast.WalkStatus {
 	f, ok := r.renderers[n.Kind()]
 	if ok {
-		return f(r, n)
+		return f(ctx, r, n)
 	}
 
 	switch n := n.(type) {
 	case *ast.String:
-		text := r.State.TextBlock()
+		text := r.State(ctx).TextBlock()
 		text.Insert(string(n.Value))
 
 	case *ast.Text:
-		text := r.State.TextBlock()
+		text := r.State(ctx).TextBlock()
 		text.Insert(string(n.Segment.Value(r.src)))
 
 		switch {
@@ -152,21 +159,21 @@ func (r *Renderer) RenderOnce(n ast.Node) ast.WalkStatus {
 			return ast.WalkContinue
 		}
 
-		return r.RenderChildrenWithTag(n, tagName)
+		return r.RenderChildrenWithTag(ctx, n, tagName)
 
 	case *ast.Heading:
 		// h1 ~ h6
 		if n.Level >= 1 && n.Level <= 6 {
-			text := r.State.TextBlock()
+			text := r.State(ctx).TextBlock()
 			text.EndLine(2)
-			return r.RenderChildrenWithTag(n, "h"+strconv.Itoa(n.Level))
+			return r.RenderChildrenWithTag(ctx, n, "h"+strconv.Itoa(n.Level))
 		}
 
 	case *ast.CodeSpan:
-		return r.RenderChildrenWithTag(n, "code")
+		return r.RenderChildrenWithTag(ctx, n, "code")
 
 	case *ast.Link:
-		text := r.State.TextBlock()
+		text := r.State(ctx).TextBlock()
 		text.ConnectLinkHandler()
 
 		if string(n.Title) != "" {
@@ -174,7 +181,7 @@ func (r *Renderer) RenderOnce(n ast.Node) ast.WalkStatus {
 		}
 
 		startIx := text.Iter.Offset()
-		status := r.RenderChildren(n)
+		status := r.RenderChildren(ctx, n)
 
 		start := text.Iter.Copy()
 		start.SetOffset(startIx)
@@ -184,7 +191,7 @@ func (r *Renderer) RenderOnce(n ast.Node) ast.WalkStatus {
 		return status
 
 	case *ast.AutoLink:
-		text := r.State.TextBlock()
+		text := r.State(ctx).TextBlock()
 		text.ConnectLinkHandler()
 
 		startIx := text.Iter.Offset()
@@ -198,31 +205,43 @@ func (r *Renderer) RenderOnce(n ast.Node) ast.WalkStatus {
 		return ast.WalkContinue
 
 	case *ast.List:
-		listRenderer := *r
 		if n.IsOrdered() {
-			start := n.Start
-			listRenderer.listIx = &start
+			ctx = ctxt.With(ctx, &block.ListIndex{
+				Index:     n.Start,
+				Unordered: false,
+			})
 		} else {
-			listRenderer.listIx = nil
+			ctx = ctxt.With(ctx, &block.ListIndex{
+				Unordered: true,
+			})
 		}
-
-		listRenderer.RenderChildren(n)
+		r.RenderChildren(ctx, n)
 		return ast.WalkSkipChildren
 
 	case *ast.ListItem:
 		// Ensure the ListItemBlock is never reused for other nodes.
-		defer r.State.FinalizeBlock()
+		defer r.State(ctx).FinalizeBlock()
 
-		listItem := block.NewListItemBlock(r.State, r.listIx, n.Offset)
-		r.State.Append(listItem)
-
-		// TODO: prevent children from having block-level elements.
-		r.RenderChildren(n)
-
-		if r.listIx != nil {
-			*r.listIx++
+		listIx, ok := ctxt.From[*block.ListIndex](ctx)
+		if !ok {
+			// ListItem outside of List? Don't handle.
+			return ast.WalkContinue
 		}
 
+		listIx.Level = n.Offset
+		slog.Debug(
+			"rendering list item using mdrender",
+			"index", listIx.Index,
+			"level", listIx.Level,
+			"unordered", listIx.Unordered)
+
+		listItem := block.NewListItemBlock(r.State(ctx), *listIx)
+		r.State(ctx).Append(listItem)
+
+		// TODO: prevent children from having block-level elements.
+		r.RenderChildren(ctx, n)
+
+		listIx.Index++
 		return ast.WalkSkipChildren
 
 	case *ast.Paragraph:
@@ -233,7 +252,7 @@ func (r *Renderer) RenderOnce(n ast.Node) ast.WalkStatus {
 			}
 		}
 
-		text := r.State.TextBlock()
+		text := r.State(ctx).TextBlock()
 		text.EndLine(2)
 
 	case *ast.FencedCodeBlock:
@@ -243,24 +262,24 @@ func (r *Renderer) RenderOnce(n ast.Node) ast.WalkStatus {
 			return ast.WalkContinue
 		}
 
-		code := block.NewCodeBlock(r.State)
+		code := block.NewCodeBlock(r.State(ctx))
 		code.TextBlock().TagNameBounded("code", func() {
 			r.InsertSegments(code.TextBlock(), lines)
 		})
 		code.Highlight(string(n.Language(r.src)))
 
-		r.State.Append(code)
-		r.State.FinalizeBlock() // no more code from here on
+		r.State(ctx).Append(code)
+		r.State(ctx).FinalizeBlock() // no more code from here on
 		return ast.WalkSkipChildren
 
 	case *ast.Blockquote:
-		quote := block.NewBlockquote(r.State)
-		r.State.Append(quote)
-		return r.WithState(quote.State).RenderChildren(n)
+		quote := block.NewBlockquote(r.State(ctx))
+		r.State(ctx).Append(quote)
+		return r.RenderChildren(WithState(ctx, quote.State), n)
 
 	default:
 		if r.fallbackR != nil {
-			return r.fallbackR(r, n)
+			return r.fallbackR(ctx, r, n)
 		}
 	}
 

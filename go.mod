@@ -1,6 +1,8 @@
 module github.com/diamondburned/chatkit
 
-go 1.18
+go 1.21.0
+
+toolchain go1.21.5
 
 require (
 	github.com/alecthomas/chroma v0.10.0
@@ -12,6 +14,7 @@ require (
 	github.com/yuin/goldmark v1.4.13
 	github.com/zalando/go-keyring v0.2.1
 	golang.org/x/crypto v0.0.0-20210921155107-089bfa567519
+	libdb.so/ctxt v0.0.0-20240229093153-2db38a5d3c12
 	libdb.so/go-emoji v0.0.0-20240508073816-39776eee41ac
 )
 
