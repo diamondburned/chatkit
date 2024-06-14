@@ -63,13 +63,19 @@ const ChipAvatarSize = 20 // smaller than usual
 func NewChip(ctx context.Context, avatarProvider imgutil.Provider) *Chip {
 	c := Chip{ctx: ctx}
 
-	c.Name = gtk.NewLabel("")
-	c.Name.AddCSSClass("mauthor-chip-colored")
-	c.Name.SetVAlign(gtk.AlignCenter)
-	c.Name.SetXAlign(0.4) // account for the right round corner
+	name := gtk.NewLabel("")
+	name.AddCSSClass("mauthor-chip-colored")
+	name.SetVAlign(gtk.AlignCenter)
+	name.SetXAlign(0.4) // account for the right round corner
+	c.Name = name
 
-	c.Avatar = onlineimage.NewAvatar(ctx, avatarProvider, ChipAvatarSize)
-	c.Avatar.ConnectLabel(c.Name)
+	avatar := onlineimage.NewAvatar(ctx, avatarProvider, ChipAvatarSize)
+	name.NotifyProperty("label", func() {
+		text := name.Text()
+		avatar.SetText(text)
+		avatar.SetTooltipText(text)
+	})
+	c.Avatar = avatar
 
 	c.Box = gtk.NewBox(gtk.OrientationHorizontal, 0)
 	c.Box.SetOverflow(gtk.OverflowHidden)

@@ -68,7 +68,7 @@ func NewToggle(ctx context.Context, provider imgutil.Provider) *Toggle {
 
 // SetName sets the tooltip hover and the avatar initials.
 func (t *Toggle) SetName(name string) {
-	t.avatar.SetInitials(name)
+	t.avatar.SetText(name)
 	t.SetTooltipText(name)
 }
 
