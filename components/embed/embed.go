@@ -274,6 +274,7 @@ func New(ctx context.Context, maxW, maxH int, opts Opts) *Embed {
 					video.ConnectDestroy(func() {
 						video := videoRef.Get()
 						video.SetMediaStream(nil)
+						vi.clearMedia()
 					})
 
 					vi.media.Play()
@@ -307,6 +308,9 @@ func New(ctx context.Context, maxW, maxH int, opts Opts) *Embed {
 					e.Thumbnail.ConnectUnmap(func() {
 						media := mediaRef.Get()
 						media.Ended()
+					})
+					e.Thumbnail.ConnectDestroy(func() {
+						vi.clearMedia()
 					})
 
 					vi.media.SetPlaying(playing)
@@ -572,6 +576,19 @@ type extraVideoEmbed struct {
 }
 
 func (*extraVideoEmbed) extra() {}
+
+// clearMedia stops playback and releases the resources held by the
+// GtkMediaFile. Without this, the media pipeline and the file descriptor it
+// holds stay open for as long as the Embed is reachable, even after the
+// widget tree using it has been destroyed.
+func (vi *extraVideoEmbed) clearMedia() {
+	if vi.media == nil {
+		return
+	}
+	vi.media.Pause()
+	vi.media.Clear()
+	vi.media = nil
+}
 
 func (vi *extraVideoEmbed) downloadVideo(e *Embed) {
 	if e.isBusy() || vi.media != nil {
