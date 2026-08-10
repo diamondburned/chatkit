@@ -266,14 +266,16 @@ func New(ctx context.Context, maxW, maxH int, opts Opts) *Embed {
 
 					mediaRef := coreglib.NewWeakRef(vi.media)
 					video.ConnectUnmap(func() {
-						media := mediaRef.Get()
-						media.Ended()
+						if media := mediaRef.Get(); media != nil {
+							media.Pause()
+						}
 					})
 
 					videoRef := coreglib.NewWeakRef(video)
 					video.ConnectDestroy(func() {
-						video := videoRef.Get()
-						video.SetMediaStream(nil)
+						if video := videoRef.Get(); video != nil {
+							video.SetMediaStream(nil)
+						}
 					})
 
 					vi.media.Play()
@@ -305,8 +307,16 @@ func New(ctx context.Context, maxW, maxH int, opts Opts) *Embed {
 
 					e.Thumbnail.SetPaintable(vi.media)
 					e.Thumbnail.ConnectUnmap(func() {
-						media := mediaRef.Get()
-						media.Ended()
+						if media := mediaRef.Get(); media != nil {
+							media.Pause()
+						}
+					})
+					// Restore the playback state the embed had before it
+					// scrolled out of view.
+					e.Thumbnail.ConnectMap(func() {
+						if media := mediaRef.Get(); media != nil {
+							media.SetPlaying(playing)
+						}
 					})
 
 					vi.media.SetPlaying(playing)
