@@ -1,12 +1,12 @@
 module github.com/diamondburned/chatkit
 
-go 1.24.0
+go 1.25.0
 
 require (
 	github.com/alecthomas/chroma v0.10.0
-	github.com/diamondburned/gotk4-adwaita/pkg v0.0.0-20240107232253-5f283b5d35bc
+	github.com/diamondburned/gotk4-adwaita/pkg v0.0.0-20261031204147-41c057c79b39
 	github.com/diamondburned/gotk4/pkg v0.4.2-0.20261031093702-169e0f82bca8
-	github.com/diamondburned/gotkit v0.0.0-20240614105032-cdfb37197d77
+	github.com/diamondburned/gotkit v0.0.0-20261031204637-f5304451c287
 	github.com/dustin/go-humanize v1.0.0
 	github.com/pkg/errors v0.9.1
 	github.com/yuin/goldmark v1.4.13
@@ -21,10 +21,9 @@ require (
 	github.com/danieljoos/wincred v1.1.0 // indirect
 	github.com/dlclark/regexp2 v1.4.0 // indirect
 	github.com/godbus/dbus/v5 v5.0.6 // indirect
-	github.com/leonelquinteros/gotext v1.5.3-0.20230829162019-37f474cfb069 // indirect
+	github.com/leonelquinteros/gotext v1.7.2 // indirect
 	github.com/puzpuzpuz/xsync/v3 v3.1.0 // indirect
-	github.com/yalue/merged_fs v1.2.3 // indirect
-	golang.org/x/image v0.0.0-20220902085622-e7cb96979f69 // indirect
-	golang.org/x/sync v0.0.0-20220722155255-886fb9371eb4 // indirect
+	github.com/yalue/merged_fs v1.3.0 // indirect
+	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/text v0.15.0 // indirect
 )
