@@ -1,13 +1,11 @@
 module github.com/diamondburned/chatkit
 
-go 1.21.0
-
-toolchain go1.21.5
+go 1.24.0
 
 require (
 	github.com/alecthomas/chroma v0.10.0
 	github.com/diamondburned/gotk4-adwaita/pkg v0.0.0-20240107232253-5f283b5d35bc
-	github.com/diamondburned/gotk4/pkg v0.2.3-0.20240606221803-e395a91f5db3
+	github.com/diamondburned/gotk4/pkg v0.4.2-0.20261031093702-169e0f82bca8
 	github.com/diamondburned/gotkit v0.0.0-20240614105032-cdfb37197d77
 	github.com/dustin/go-humanize v1.0.0
 	github.com/pkg/errors v0.9.1
@@ -19,7 +17,6 @@ require (
 )
 
 require (
-	github.com/KarpelesLab/weak v0.1.1 // indirect
 	github.com/alessio/shellescape v1.4.1 // indirect
 	github.com/danieljoos/wincred v1.1.0 // indirect
 	github.com/dlclark/regexp2 v1.4.0 // indirect
@@ -27,7 +24,6 @@ require (
 	github.com/leonelquinteros/gotext v1.5.3-0.20230829162019-37f474cfb069 // indirect
 	github.com/puzpuzpuz/xsync/v3 v3.1.0 // indirect
 	github.com/yalue/merged_fs v1.2.3 // indirect
-	go4.org/unsafe/assume-no-moving-gc v0.0.0-20231121144256-b99613f794b6 // indirect
 	golang.org/x/image v0.0.0-20220902085622-e7cb96979f69 // indirect
 	golang.org/x/sync v0.0.0-20220722155255-886fb9371eb4 // indirect
 	golang.org/x/text v0.15.0 // indirect

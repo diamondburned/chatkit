@@ -92,7 +92,7 @@ func NewChip(ctx context.Context, avatarProvider imgutil.Provider) *Chip {
 		if h < 1 {
 			return true
 		}
-		c.Avatar.SetSizeRequest(h)
+		c.Avatar.SetSize(h)
 		return false
 	})
 

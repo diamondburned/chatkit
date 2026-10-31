@@ -109,7 +109,10 @@ type Opts struct {
 type Embed struct {
 	*adw.Bin
 	Button    *gtk.Button
-	Thumbnail *onlineimage.Picture
+	Thumbnail *gtk.Picture
+	// Image is the online image that Thumbnail shows, unless it shows a
+	// video or an error icon.
+	Image *onlineimage.Paintable
 
 	ctx   context.Context
 	extra interface{ extra() }
@@ -126,12 +129,6 @@ type Embed struct {
 type extraImageEmbed struct{}
 
 func (*extraImageEmbed) extra() {}
-
-type extraGIFEmbed struct {
-	anim *onlineimage.AnimationController
-}
-
-func (*extraGIFEmbed) extra() {}
 
 var embedCSS = cssutil.Applier("thumbnail-embed", `
 	.thumbnail-embed {
@@ -204,16 +201,13 @@ func New(ctx context.Context, maxW, maxH int, opts Opts) *Embed {
 		// imgutil.WithRescale(maxW, maxH),
 	)
 
-	e.Thumbnail = onlineimage.NewPicture(ctx, opts.Provider)
+	e.Image = onlineimage.NewPaintable(ctx, opts.Provider)
+
+	e.Thumbnail = gtk.NewPicture()
 	e.Thumbnail.AddCSSClass("thumbnail-embed-image")
 	e.Thumbnail.SetCanShrink(true)
-	e.Thumbnail.SetKeepAspectRatio(true)
-
-	pictureRef := coreglib.NewWeakRef(e.Thumbnail)
-	e.Thumbnail.ConnectDestroy(func() {
-		picture := pictureRef.Get()
-		picture.SetPaintable(nil)
-	})
+	e.Thumbnail.SetContentFit(gtk.ContentFitContain)
+	e.Thumbnail.SetPaintable(e.Image)
 
 	e.Button = gtk.NewButton()
 	e.Button.SetHasFrame(false)
@@ -336,7 +330,6 @@ func New(ctx context.Context, maxW, maxH int, opts Opts) *Embed {
 							vi.media.Seek(0)
 						}
 					} else {
-						e.Thumbnail.Disable()
 						e.activate()
 					}
 				})
@@ -346,30 +339,24 @@ func New(ctx context.Context, maxW, maxH int, opts Opts) *Embed {
 			e.AddCSSClass("thumbnail-embed-typegif")
 			e.AddCSSClass("thumbnail-embed-interactive")
 
-			anim := e.Thumbnail.EnableAnimation()
-			e.extra = &extraGIFEmbed{anim: anim}
-
-			if !opts.Autoplay {
+			if opts.Autoplay {
+				e.Image.SetPlaying(true)
+			} else {
 				gif := newGIFLabel(false)
 				overlay.AddOverlay(gif)
 
 				bindButtonPlayback(e.Button, opts, func(play bool) {
-					if play {
-						anim.Start()
-						// Show or hide the GIF icon while it's playing.
-						gif.Hide()
-					} else {
-						anim.Stop()
-						gif.Show()
-					}
+					e.Image.SetPlaying(play)
+					// Show or hide the GIF icon while it's playing.
+					gif.SetVisible(!play)
 				})
 			}
 		}
 	}
 
 	e.NotifyImage(func() {
-		if p := e.Thumbnail.Paintable(); p != nil {
-			e.setSize(p.IntrinsicWidth(), p.IntrinsicHeight())
+		if w, h := e.ImageSize(); w > 0 && h > 0 {
+			e.setSize(w, h)
 			e.finishSetting()
 		}
 	})
@@ -493,15 +480,11 @@ func (e *Embed) SetFromURL(url string) {
 	switch embedType := TypeFromURL(url); embedType {
 
 	case EmbedTypeImage, EmbedTypeGIF:
-		e.Thumbnail.SetURL(url)
-
-		if embedType == EmbedTypeGIF && e.opts.Autoplay {
-			gif := e.extra.(*extraGIFEmbed)
-			gif.anim.Start()
-		}
+		e.Image.SetURL(url)
+		e.Thumbnail.SetPaintable(e.Image)
 
 	case EmbedTypeVideo, EmbedTypeGIFV:
-		e.Thumbnail.Disable()
+		e.Image.SetURL("")
 
 		if e.opts.Autoplay {
 			vi := e.extra.(*extraVideoEmbed)
@@ -510,9 +493,20 @@ func (e *Embed) SetFromURL(url string) {
 	}
 }
 
-// NotifyImage calls f everytime the Embed thumbnail changes.
-func (e *Embed) NotifyImage(f func()) glib.SignalHandle {
-	return e.Thumbnail.NotifyProperty("paintable", f)
+// NotifyImage calls f everytime the Embed thumbnail or its size changes.
+func (e *Embed) NotifyImage(f func()) {
+	e.Image.ConnectInvalidateSize(f)
+	e.Thumbnail.NotifyProperty("paintable", f)
+}
+
+// ImageSize returns the size of the image that the thumbnail shows, or 0 if
+// there is none yet.
+func (e *Embed) ImageSize() (w, h int) {
+	p := e.Thumbnail.Paintable()
+	if p == nil {
+		return 0, 0
+	}
+	return p.IntrinsicWidth(), p.IntrinsicHeight()
 }
 
 // undo effects
